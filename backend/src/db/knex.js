@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-dotenv.config(); // 🔥 FORCE ENV LOAD HERE
+dotenv.config(); 
 
 import knex from "knex";
 import config from "../../knexfile.js";
