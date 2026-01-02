@@ -5,13 +5,26 @@ import {
   FaEnvelope,
   FaLock,
 } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import "/src/index.css";
 import nccLogo from "./assets/ncc-logo.png";
-import ResetPasswordModal from "./ResetPasswordModal"; // ✅ ADD THIS
+import ResetPasswordModal from "./ResetPasswordModal";
 
 const LoginPage = () => {
-  const [role, setRole] = useState("SUO");
-  const [showReset, setShowReset] = useState(false); // ✅ ADD STATE
+  const navigate = useNavigate();
+
+  const [role, setRole] = useState("CADET");
+  const [showReset, setShowReset] = useState(false);
+
+  const handleLogin = () => {
+    if (role === "CADET") {
+      navigate("/dashboard");
+    } else if (role === "SUO") {
+      alert("SUO dashboard not implemented yet");
+    } else {
+      alert("Alumni dashboard not implemented yet");
+    }
+  };
 
   return (
     <div className="login-page">
@@ -25,18 +38,8 @@ const LoginPage = () => {
 
         <div className="login-form">
           <div className="input-group">
-            <FaIdBadge className="input-icon" />
-            <input type="text" placeholder="COLLEGE ID" />
-          </div>
-
-          <div className="input-group">
             <FaMedal className="input-icon" />
             <input type="text" placeholder="REGIMENTAL NUMBER" />
-          </div>
-
-          <div className="input-group">
-            <FaEnvelope className="input-icon" />
-            <input type="email" placeholder="EMAIL ADDRESS" />
           </div>
 
           <div className="input-group">
@@ -58,9 +61,12 @@ const LoginPage = () => {
             ))}
           </div>
 
-          <button className="login-btn">LOGIN</button>
+          {/* LOGIN BUTTON */}
+          <button className="login-btn" onClick={handleLogin}>
+            LOGIN
+          </button>
 
-          {/* ✅ RESET PASSWORD LINK */}
+          {/* RESET PASSWORD */}
           <p
             className="reset-link"
             onClick={() => setShowReset(true)}
@@ -70,7 +76,7 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* ✅ RESET PASSWORD POPUP */}
+      {/* RESET PASSWORD POPUP */}
       {showReset && (
         <ResetPasswordModal onClose={() => setShowReset(false)} />
       )}

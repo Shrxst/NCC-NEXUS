@@ -3,7 +3,6 @@ import logoImage from "./assets/ncc-logo.png";
 import NavBar from "./NavBar";
 import LoginModal from "./LoginModal";
 import AnoLoginModal from "./AnoLoginModal"; // ✅ ADD
-
 const LandingPage = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showAnoLogin, setShowAnoLogin] = useState(false); // ✅ ADD
