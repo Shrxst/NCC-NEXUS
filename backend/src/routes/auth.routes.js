@@ -9,5 +9,6 @@ router.post("/login", login);
 router.get("/me", authenticate, (req, res) => {
   res.json({ user: req.user });
 });
+router.post("/reset-password", authenticate, resetPasswordLoggedIn);
 
 export default router;
