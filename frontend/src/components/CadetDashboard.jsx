@@ -5,19 +5,23 @@ import {
   Image as ImageIcon,
   LogOut,
   Camera,
-  X,
   Edit2,
+  KeyRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import "./dashboard.css";
 import logoImage from "./assets/ncc-logo.png";
 import Feed from "./Feed";
+import ResetPasswordModal from "./ResetPasswordModal";
 
 export default function CadetDashboard() {
   const navigate = useNavigate();
 
   /* ================= TAB STATE ================= */
   const [activeTab, setActiveTab] = useState("profile");
+
+  /* ================= RESET PASSWORD ================= */
+  const [showReset, setShowReset] = useState(false);
 
   /* ================= PROFILE STATE ================= */
   const [profileImage, setProfileImage] = useState(
@@ -41,7 +45,7 @@ export default function CadetDashboard() {
     }
   };
 
-  /* ================= BIO EDIT STATE ================= */
+  /* ================= BIO EDIT ================= */
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
 
@@ -52,10 +56,7 @@ export default function CadetDashboard() {
 
   const saveBio = () => {
     if (tempBio.trim()) {
-      setProfileData({
-        ...profileData,
-        bio: tempBio.trim(),
-      });
+      setProfileData({ ...profileData, bio: tempBio.trim() });
     }
     setIsEditingBio(false);
   };
@@ -67,7 +68,11 @@ export default function CadetDashboard() {
 
   return (
     <>
-      {/* ================= DASHBOARD LAYOUT ================= */}
+      {/* ================= RESET PASSWORD MODAL ================= */}
+      {showReset && (
+        <ResetPasswordModal onClose={() => setShowReset(false)} />
+      )}
+
       <div className="layout">
         {/* ================= SIDEBAR ================= */}
         <aside className="sidebar">
@@ -105,6 +110,14 @@ export default function CadetDashboard() {
                 <ImageIcon size={18} />
                 <span>Certificates</span>
               </button>
+
+              <button
+                className="nav-item"
+                onClick={() => setShowReset(true)}
+              >
+                <KeyRound size={18} />
+                <span>Reset Password</span>
+              </button>
             </div>
           </div>
 
@@ -116,7 +129,6 @@ export default function CadetDashboard() {
 
         {/* ================= MAIN ================= */}
         <main className="main">
-          {/* ================= FEED TAB ================= */}
           {activeTab === "feed" ? (
             <Feed
               profileImage={profileImage}
@@ -125,7 +137,7 @@ export default function CadetDashboard() {
             />
           ) : (
             <>
-              {/* ================= PROFILE UI ================= */}
+              {/* ================= PROFILE HEADER ================= */}
               <div className="banner">
                 <div className="profile-photo-wrapper">
                   <img src={profileImage} className="profile-photo" />
@@ -172,13 +184,18 @@ export default function CadetDashboard() {
                         className="bio-edit-textarea"
                         value={tempBio}
                         onChange={(e) => setTempBio(e.target.value)}
-                        placeholder="Write your bio..."
                       />
                       <div className="bio-edit-actions">
-                        <button className="bio-save-btn" onClick={saveBio}>
+                        <button
+                          className="bio-save-btn"
+                          onClick={saveBio}
+                        >
                           Save
                         </button>
-                        <button className="bio-cancel-btn" onClick={cancelEditBio}>
+                        <button
+                          className="bio-cancel-btn"
+                          onClick={cancelEditBio}
+                        >
                           Cancel
                         </button>
                       </div>
@@ -189,7 +206,6 @@ export default function CadetDashboard() {
                       <button
                         className="bio-edit-icon"
                         onClick={startEditBio}
-                        title="Edit Bio"
                       >
                         <Edit2 size={16} />
                       </button>
@@ -200,7 +216,6 @@ export default function CadetDashboard() {
 
               <h2 className="section-title">Recent Activity</h2>
 
-              {/* ================= OWN POSTS ONLY ================= */}
               <Feed
                 profileImage={profileImage}
                 profileName={profileData.name}

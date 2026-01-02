@@ -1,20 +1,16 @@
 import { useState } from "react";
 import {
-  FaIdBadge,
   FaMedal,
-  FaEnvelope,
   FaLock,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "/src/index.css";
 import nccLogo from "./assets/ncc-logo.png";
-import ResetPasswordModal from "./ResetPasswordModal";
 
 const LoginPage = () => {
   const navigate = useNavigate();
 
   const [role, setRole] = useState("CADET");
-  const [showReset, setShowReset] = useState(false);
 
   const handleLogin = () => {
     if (role === "CADET") {
@@ -32,7 +28,7 @@ const LoginPage = () => {
         {/* LIGHT OVERLAY FOR RIGHT-SIDE GLOW */}
         <span className="card-glow" />
 
-        {/* LOGO CENTER */}
+        {/* LOGO */}
         <img src={nccLogo} alt="NCC Logo" className="login-logo" />
         <h1 className="login-title">NCC NEXUS</h1>
 
@@ -65,21 +61,8 @@ const LoginPage = () => {
           <button className="login-btn" onClick={handleLogin}>
             LOGIN
           </button>
-
-          {/* RESET PASSWORD */}
-          <p
-            className="reset-link"
-            onClick={() => setShowReset(true)}
-          >
-            RESET PASSWORD?
-          </p>
         </div>
       </div>
-
-      {/* RESET PASSWORD POPUP */}
-      {showReset && (
-        <ResetPasswordModal onClose={() => setShowReset(false)} />
-      )}
     </div>
   );
 };
