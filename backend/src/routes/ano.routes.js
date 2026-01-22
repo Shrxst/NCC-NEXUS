@@ -1,29 +1,20 @@
 const express = require("express");
-const {
-  addCadet,
-  getCadets,
-  updateCadet,
-  deleteCadet,
-  searchCadets,
-} = require("../controllers/ano.controller");
-
-const { authenticate } = require("../middlewares/auth.middleware");
-
 const router = express.Router();
+const { authenticate } = require("../middlewares/auth.middleware");
+const { authorizeRole } = require("../middlewares/authorize.middleware");
+const AnoController = require("../controllers/ano.controller");
 
-// Add Cadet (Generate Credentials)
-router.post("/cadets", authenticate, addCadet);
+// Middleware wrapper for all ANO routes
+const protectAno = [authenticate, authorizeRole("ANO")];
 
-// Get All Cadets (ANO's College)
-router.get("/cadets", authenticate, getCadets);
+// Dashboard Stats
+router.get("/dashboard/stats", protectAno, AnoController.getDashboardStats);
 
-// Update Cadet
-router.put("/cadets/:regimental_no", authenticate, updateCadet);
-
-// Delete Cadet
-router.delete("/cadets/:regimental_no", authenticate, deleteCadet);
-
-// Search Cadets
-router.get("/cadets/search", authenticate, searchCadets);
+// Cadet Management
+router.get("/cadets", protectAno, AnoController.getCadets);
+router.post("/cadets", protectAno, AnoController.addCadet);
+router.get("/cadets/search", protectAno, AnoController.searchCadets);
+router.put("/cadets/:regimental_no", protectAno, AnoController.updateCadet);
+router.delete("/cadets/:regimental_no", protectAno, AnoController.deleteCadet);
 
 module.exports = router;

@@ -1,9 +1,9 @@
-import bcrypt from "bcrypt";
+const bcrypt = require("bcrypt");
 
-export async function seed(knex) {
+exports.seed = async function (knex) {
 
   /* -------------------------------
-     1️⃣ Prevent duplicate seed
+      1️⃣ Prevent duplicate seed
   --------------------------------*/
   const existingANO = await knex("users")
     .where({ email: "ano@ncc.com" })
@@ -15,19 +15,19 @@ export async function seed(knex) {
   }
 
   /* -------------------------------
-     2️⃣ Seed Colleges
+      2️⃣ Seed Colleges
   --------------------------------*/
   const [college] = await knex("colleges")
-  .insert({
-    college_code: "0801",
-    college_name: "Shri Govindram Seksaria Institute of Technology and Science",
-    short_name: "SGSITS",
-    city: "Indore",
-  })
-  .returning("*");
+    .insert({
+      college_code: "0801",
+      college_name: "Shri Govindram Seksaria Institute of Technology and Science",
+      short_name: "SGSITS",
+      city: "Indore",
+    })
+    .returning("*");
 
   /* -------------------------------
-     3️⃣ Seed Cadet Ranks
+      3️⃣ Seed Cadet Ranks
   --------------------------------*/
   const ranks = [
     "Senior Under Officer",
@@ -48,7 +48,7 @@ export async function seed(knex) {
   }
 
   /* -------------------------------
-     4️⃣ Seed Cadet Designations
+      4️⃣ Seed Cadet Designations
   --------------------------------*/
   const designations = ["Cadet", "SUO"];
 
@@ -60,7 +60,7 @@ export async function seed(knex) {
   }
 
   /* -------------------------------
-     5️⃣ Create ANO User
+      5️⃣ Create ANO User
   --------------------------------*/
   const password = "ANO@123"; // temporary
   const password_hash = await bcrypt.hash(password, 10);
@@ -76,7 +76,7 @@ export async function seed(knex) {
     .returning("*");
 
   /* -------------------------------
-     6️⃣ Create ANO Profile
+      6️⃣ Create ANO Profile
   --------------------------------*/
   await knex("anos").insert({
     user_id: user.user_id,
@@ -84,5 +84,5 @@ export async function seed(knex) {
     appointment_date: new Date(),
   });
 
-  console.log("Initial seed completed successfully");
-}
+  console.log("✅ Initial seed completed successfully");
+};

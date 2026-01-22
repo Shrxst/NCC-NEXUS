@@ -7,10 +7,16 @@ const Sidebar = ({ isOpen = true, onClose }) => {
 
   // 🔥 Logout handler
   const handleLogout = () => {
-    // future: clear auth/token here if needed
-    // localStorage.clear();
+    // 1. Clear Credentials
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user");
+
+    // 2. Close Sidebar (Mobile)
     if (typeof onClose === "function") onClose();
-    navigate("/"); // ✅ redirect to landing page
+
+    // 3. Redirect to Landing Page
+    navigate("/"); 
   };
 
   return (
