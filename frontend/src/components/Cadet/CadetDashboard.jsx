@@ -15,15 +15,15 @@ import logoImage from "../assets/ncc-logo.png";
 import Feed from "./Feed";
 import ResetPasswordModal from "./ResetPasswordModal";
 import Chatbot from "./Chatbot";
-import { closeCadetSidebar, toggleCadetSidebar } from "../../features/ui/uiSlice";
+import { closeCadetSidebar } from "../../features/ui/uiSlice";
 
 export default function CadetDashboard() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const isCadetSidebarOpen = useSelector((state) => state.ui.isCadetSidebarOpen);
 
   const [activeTab, setActiveTab] = useState("profile");
   const [showReset, setShowReset] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [profileImage, setProfileImage] = useState(
     "https://images.unsplash.com/photo-1607746882042-944635dfe10e"
@@ -71,17 +71,9 @@ export default function CadetDashboard() {
       )}
 
       <div className="layout">
-        {/* ================= SIDEBAR ================= */}
-        {isCadetSidebarOpen ? (
-          <button
-            type="button"
-            className="cadet-sidebar-backdrop"
-            aria-label="Close sidebar"
-            onClick={() => dispatch(closeCadetSidebar())}
-          />
-        ) : null}
 
-        <aside className={`sidebar${isCadetSidebarOpen ? " open" : ""}`}>
+        {/* ================= SIDEBAR ================= */}
+        <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
           <div>
             <div className="sidebar-header">
               <img src={logoImage} className="sidebar-logo" alt="NCC Logo" />
@@ -96,7 +88,7 @@ export default function CadetDashboard() {
                 className={`nav-item ${activeTab === "profile" ? "active" : ""}`}
                 onClick={() => {
                   setActiveTab("profile");
-                  dispatch(closeCadetSidebar());
+                  setSidebarOpen(false);
                 }}
               >
                 <User size={18} />
@@ -107,7 +99,7 @@ export default function CadetDashboard() {
                 className={`nav-item ${activeTab === "feed" ? "active" : ""}`}
                 onClick={() => {
                   setActiveTab("feed");
-                  dispatch(closeCadetSidebar());
+                  setSidebarOpen(false);
                 }}
               >
                 <MapPin size={18} />
@@ -118,13 +110,13 @@ export default function CadetDashboard() {
                 className={`nav-item ${activeTab === "chatbot" ? "active" : ""}`}
                 onClick={() => {
                   setActiveTab("chatbot");
-                  dispatch(closeCadetSidebar());
+                  setSidebarOpen(false);
                 }}
               >
                 🤖 <span>Chatbot</span>
               </button>
 
-              <button className="nav-item">
+              <button className="nav-item" onClick={() => setSidebarOpen(false)}>
                 <ImageIcon size={18} />
                 <span>Certificates</span>
               </button>
@@ -133,7 +125,7 @@ export default function CadetDashboard() {
                 className="nav-item"
                 onClick={() => {
                   setShowReset(true);
-                  dispatch(closeCadetSidebar());
+                  setSidebarOpen(false);
                 }}
               >
                 <KeyRound size={18} />
@@ -154,18 +146,27 @@ export default function CadetDashboard() {
           </button>
         </aside>
 
+        {/* ================= BACKDROP (NOW CORRECT POSITION) ================= */}
+        {sidebarOpen && (
+          <div
+            className="cadet-sidebar-backdrop"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* ================= MAIN ================= */}
-        <main className="main">
+        <main className={`main ${sidebarOpen ? "sidebar-open" : ""}`}>
           <div className="cadet-topbar">
             <button
               type="button"
               className="cadet-sidebar-toggle"
               aria-label="Toggle sidebar"
-              onClick={() => dispatch(toggleCadetSidebar())}
+              onClick={() => setSidebarOpen(!sidebarOpen)}
             >
               ☰
             </button>
           </div>
+
           {activeTab === "chatbot" && <Chatbot />}
 
           {activeTab === "feed" && (

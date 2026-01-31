@@ -16,7 +16,7 @@ body {
   background: #0a0e1a;
   border-right: 1px solid #151a25;
   padding: 25px;
-
+  z-index: 9999;
   position: fixed;
   top: 0;
   bottom: 0;
@@ -24,27 +24,52 @@ body {
 
   display: flex;
   flex-direction: column;
+
+  transform: translateX(-105%);
+  transition: transform 0.25s ease;
+}
+
+.sidebar.open {
+  transform: translateX(0);
 }
 
 .cadet-topbar {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: flex-start;
   margin-bottom: 18px;
+  background: #0a0e1a;
+  padding: 10px 20px;
+  border-bottom: 1px solid #151a25;
 }
 
 .cadet-sidebar-toggle {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: #a6c34e;
+  border: 1px solid #a6c34e;
+  color: #000;
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 16px;
   cursor: pointer;
+  font-weight: bold;
+}
+
+@media (max-width: 850px) {
+  .cadet-sidebar-toggle {
+    padding: 15px 20px;
+    font-size: 18px;
+    background: #a6c34e;
+    border: 2px solid #a6c34e;
+    color: #000;
+    font-weight: bold;
+  }
 }
 
 .cadet-sidebar-backdrop {
-  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9998;   /* sidebar se ek level neeche */
 }
 
 .top-section {
@@ -63,6 +88,29 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
+}
+
+.close-sidebar-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-sidebar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .logo-box {
@@ -101,6 +149,7 @@ body {
   color: #c9cede;
   font-size: 15px;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .nav-item:hover {
@@ -128,13 +177,19 @@ body {
 }
 
 .main {
-  margin-left: 260px;
+  margin-left: 0;
   padding: 30px;
   min-height: 100vh;
   overflow-y: auto;
   background: #0c1020;
 
-  width: calc(100vw - 260px);   /* ✅ THIS IS THE FIX */
+  width: 100vw;
+  transition: margin-left 0.25s ease;
+}
+
+.main.sidebar-open {
+  margin-left: 260px;
+  width: calc(100vw - 260px);
 }
 
 /* BANNER */
@@ -435,7 +490,7 @@ input {
 }
 
 /* RESPONSIVE */
-@media (max-width: 850px) {
+@media (max-width: 1024px) {
   .main {
     margin-left: 0;
     width: 100%;
@@ -466,6 +521,32 @@ input {
 
   .sidebar {
     z-index: 9999;
+  }
+}
+
+@media (max-width: 400px) {
+  .sidebar {
+    width: 100vw;
+  }
+
+  .main.sidebar-open {
+    margin-left: 0;
+    width: 100vw;
+  }
+}
+
+@media (min-width: 851px) {
+  .sidebar {
+    transform: translateX(0);
+  }
+
+  .main {
+    margin-left: 260px;
+    width: calc(100vw - 260px);
+  }
+
+  .cadet-topbar {
+    display: none;
   }
 }
 .sidebar-logo {
@@ -630,5 +711,26 @@ input {
 
 .nice-save-btn:hover {
   background: #a8dc5c;
+}
+/* FORCE SIDEBAR TO ALWAYS STAY ON TOP */
+.sidebar {
+  position: fixed !important;
+  z-index: 999999 !important;
+  pointer-events: auto !important;
+}
+
+/* FORCE BACKDROP TO STAY BEHIND SIDEBAR */
+.cadet-sidebar-backdrop {
+  position: fixed !important;
+  z-index: 999998 !important;
+  pointer-events: auto;
+}
+
+/* PREVENT BACKDROP FROM BLOCKING SIDEBAR AREA */
+@media (max-width: 850px) {
+  .cadet-sidebar-backdrop {
+    left: 260px !important;
+    width: calc(100vw - 260px) !important;
+  }
 }
 
