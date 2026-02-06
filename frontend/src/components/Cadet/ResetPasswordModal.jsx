@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
+import "./ResetPasswordModal.css";
 
 
 const ResetPasswordModal = ({ onClose }) => {
@@ -23,7 +24,9 @@ const ResetPasswordModal = ({ onClose }) => {
         <div className="reset-form">
           {/* Current Password */}
           <div className="input-group">
-            <FaLock className="input-icon" />
+            <div className="input-icon-wrapper">
+              <FaLock className="input-icon" />
+            </div>
             <input
               type={showCurrent ? "text" : "password"}
               placeholder="Current Password"
@@ -38,7 +41,9 @@ const ResetPasswordModal = ({ onClose }) => {
 
           {/* New Password */}
           <div className="input-group">
-            <FaLock className="input-icon" />
+            <div className="input-icon-wrapper">
+              <FaLock className="input-icon" />
+            </div>
             <input
               type={showNew ? "text" : "password"}
               placeholder="New Password"
@@ -53,7 +58,9 @@ const ResetPasswordModal = ({ onClose }) => {
 
           {/* Confirm Password */}
           <div className="input-group">
-            <FaLock className="input-icon" />
+            <div className="input-icon-wrapper">
+              <FaLock className="input-icon" />
+            </div>
             <input
               type={showConfirm ? "text" : "password"}
               placeholder="Confirm New Password"
@@ -81,3 +88,4 @@ const ResetPasswordModal = ({ onClose }) => {
 };
 
 export default ResetPasswordModal;
+

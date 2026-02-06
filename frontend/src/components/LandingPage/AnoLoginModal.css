@@ -1,0 +1,25 @@
+.ano-login-modal {
+  padding: 80px 24px;
+  box-sizing: border-box;
+  align-items: center;
+  overflow-y: auto;
+}
+
+.ano-login-content {
+  border-radius: 32px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.ano-login-modal .ano-login-card {
+  padding: 32px 0;
+  box-sizing: border-box;
+}
+
+.ano-login-modal .ano-card {
+  border-radius: 24px;
+  margin: 24px 0;
+  padding: 48px 40px;
+  overflow: hidden;
+}

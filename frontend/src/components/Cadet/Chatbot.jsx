@@ -1,7 +1,7 @@
 // frontend/src/components/Chatbot.js
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios'; // Import Axios for API calls
-import './chatbot.css';
+import './Chatbot.css';
 
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
@@ -124,7 +124,8 @@ const Chatbot = () => {
   };
 
   return (
-    <div className="chatbot-inner-wrapper">
+    <div className="cadet-chatbot">
+      <div className="chatbot-inner-wrapper">
       <header className="fixed-top-bar">
         <h1 className="chat-title">Your Personal NCC Assistant Chatbot</h1>
       </header>
@@ -172,13 +173,15 @@ const Chatbot = () => {
               required
             />
             <button type="submit" className="send-btn" disabled={isLoading || !inputValue.trim()}>
-              ▶
+              Send
             </button>
           </form>
         </div>
       </div>
     </div>
+    </div>
   );
 };
 
 export default Chatbot;
+

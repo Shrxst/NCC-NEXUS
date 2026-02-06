@@ -3,29 +3,29 @@
    Isse Chatbot dashboard ke main area mein sahi se align hoga
    ========================================================================== */
 
-.chatbot-inner-wrapper {
+.cadet-chatbot .chatbot-inner-wrapper {
   display: flex;
   flex-direction: column;
   height: 100%;
   width: 100%;
   position: relative;
-  background-color: var(--ncc-main-bg, hsl(0, 0%, 98%));
+  background: #ffffff;
   overflow: hidden;
 }
 
 /* Fixed Top Bar inside Chatbot */
-.fixed-top-bar {
+.cadet-chatbot .fixed-top-bar {
   padding: 20px 40px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background-color: var(--ncc-main-bg, hsl(0, 0%, 98%));
+  border-bottom: 1px solid rgba(124, 77, 255, 0.15);
+  background: #ffffff;
   flex-shrink: 0;
   z-index: 5;
 }
 
-.chat-title {
+.cadet-chatbot .chat-title {
   font-size: 22px;
-  font-weight: 500;
-  color: var(--ncc-text-dark, hsl(225, 25%, 12%));
+  font-weight: 600;
+  color: #2b1b5a;
   margin: 0;
 }
 
@@ -33,7 +33,7 @@
    CHAT WINDOW (Middle Scrollable Section)
    ========================================================================== */
 
-.chat-view-container {
+.cadet-chatbot .chat-view-container {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -42,7 +42,7 @@
   min-height: 0; /* Flexbox scroll fix */
 }
 
-.scrollable-chat-window {
+.cadet-chatbot .scrollable-chat-window {
   flex: 1;
   overflow-y: auto;
   padding: 30px 40px 120px 40px; /* 120px bottom padding taaki input bar text na chhupaye */
@@ -53,14 +53,14 @@
 }
 
 /* Custom Scrollbar for Chat Window */
-.scrollable-chat-window::-webkit-scrollbar {
+.cadet-chatbot .scrollable-chat-window::-webkit-scrollbar {
   width: 6px;
 }
-.scrollable-chat-window::-webkit-scrollbar-thumb {
+.cadet-chatbot .scrollable-chat-window::-webkit-scrollbar-thumb {
   background: var(--ncc-primary, hsl(262, 83%, 58%));
   border-radius: 10px;
 }
-.scrollable-chat-window::-webkit-scrollbar-track {
+.cadet-chatbot .scrollable-chat-window::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -68,15 +68,15 @@
    MESSAGE BUBBLES (Smooth Animation)
    ========================================================================== */
 
-.message-wrapper {
+.cadet-chatbot .message-wrapper {
   display: flex;
   width: 100%;
 }
 
-.bot-align { justify-content: flex-start; }
-.user-align { justify-content: flex-end; }
+.cadet-chatbot .bot-align { justify-content: flex-start; }
+.cadet-chatbot .user-align { justify-content: flex-end; }
 
-.message-bubble {
+.cadet-chatbot .message-bubble {
   padding: 15px 25px;
   border-radius: 12px;
   max-width: 70%;
@@ -92,21 +92,21 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.bot-style {
-  background: hsl(0, 0%, 96%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+.cadet-chatbot .bot-style {
+  background: #ffffff;
+  border: 1px solid rgba(124, 77, 255, 0.15);
   border-bottom-left-radius: 2px;
-  color: var(--ncc-text-dark, hsl(225, 25%, 12%));
-  box-shadow: var(--ncc-shadow-card, 0 2px 12px hsla(262, 40%, 40%, 0.08));
+  color: #2b1b5a;
+  box-shadow: 0 12px 24px rgba(124, 77, 255, 0.12);
 }
 
-.user-style {
+.cadet-chatbot .user-style {
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   border-bottom-right-radius: 2px;
   color: white;
 }
 
-.time-label {
+.cadet-chatbot .time-label {
   font-size: 0.7rem;
   opacity: 0.5;
   margin-top: 5px;
@@ -118,20 +118,20 @@
    FIXED SEARCH BAR (Bottom of Chat Container)
    ========================================================================== */
 
-.fixed-input-section {
+.cadet-chatbot .fixed-input-section {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
   padding: 20px 40px 30px 40px;
-  background: linear-gradient(to top, var(--ncc-main-bg, hsl(0, 0%, 98%)) 80%, transparent);
+  background: #ffffff;
   z-index: 10;
 }
 
-.chat-input-wrapper {
+.cadet-chatbot .chat-input-wrapper {
   display: flex;
-  background: hsl(0, 0%, 97%);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  border: 1px solid rgba(124, 77, 255, 0.15);
   border-radius: 12px;
   padding: 10px 15px;
   align-items: center;
@@ -139,26 +139,26 @@
   transition: border-color 0.3s ease;
 }
 
-.chat-input-wrapper:focus-within {
-  border-color: var(--ncc-primary, hsl(262, 83%, 58%));
-  box-shadow: 0 0 0 2px hsla(262, 83%, 58%, 0.15);
+.cadet-chatbot .chat-input-wrapper:focus-within {
+  border-color: #7c4dff;
+  box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.18);
 }
 
-.chat-input-wrapper input {
+.cadet-chatbot .chat-input-wrapper input {
   flex: 1;
   background: transparent;
   border: none;
-  color: var(--ncc-text-dark, hsl(225, 25%, 12%));
+  color: #2b1b5a;
   font-size: 16px;
   outline: none;
 }
 
-.chat-input-wrapper input::placeholder {
-  color: var(--ncc-text-muted, hsl(225, 15%, 40%));
+.cadet-chatbot .chat-input-wrapper input::placeholder {
+  color: rgba(43, 27, 90, 0.5);
 }
 
-.send-btn {
-  background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
+.cadet-chatbot .send-btn {
+  background: linear-gradient(135deg, #7c4dff, #f472b6);
   border: none;
   color: white;
   width: 40px;
@@ -172,24 +172,24 @@
   flex-shrink: 0;
 }
 
-.send-btn:hover:not(:disabled) {
+.cadet-chatbot .send-btn:hover:not(:disabled) {
   filter: brightness(1.1);
   transform: scale(1.05);
 }
 
-.send-btn:disabled {
+.cadet-chatbot .send-btn:disabled {
   background: hsl(0, 0%, 85%);
   cursor: not-allowed;
   opacity: 0.6;
 }
 
 /* Thinking Indicator / Dot Pulse */
-.thinking-bubble {
+.cadet-chatbot .thinking-bubble {
   padding: 15px 25px;
   width: fit-content;
 }
 
-.dot-pulse {
+.cadet-chatbot .dot-pulse {
   width: 6px;
   height: 6px;
   border-radius: 5px;
@@ -207,18 +207,18 @@
    ========================================================================== */
 
 @media (max-width: 768px) {
-  .fixed-top-bar { padding: 15px 20px; }
+  .cadet-chatbot .fixed-top-bar { padding: 15px 20px; }
   
-  .scrollable-chat-window {
+  .cadet-chatbot .scrollable-chat-window {
     padding: 15px 20px 100px 20px;
   }
   
-  .message-bubble {
+  .cadet-chatbot .message-bubble {
     max-width: 90%;
     font-size: 14px;
   }
 
-  .fixed-input-section {
+  .cadet-chatbot .fixed-input-section {
     padding: 10px 15px 20px 15px;
   }
 }

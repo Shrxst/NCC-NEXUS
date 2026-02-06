@@ -1,23 +1,32 @@
 /* ================= FEED WRAPPER ================= */
-.feed-wrapper {
+.cadet-feed .feed-wrapper {
   width: 100%;
   padding: 40px;
 }
 
 /* ================= HEADER ================= */
-.feed-title {
+.cadet-feed .feed-title {
   font-size: 32px;
   font-weight: 700;
   color: var(--ncc-text-dark, hsl(225, 25%, 12%));
 }
 
-.feed-subtitle {
+.cadet-feed .feed-subtitle {
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
   margin-bottom: 25px;
 }
 
+.cadet-feed .feed-subtitle::after {
+  content: "";
+  display: block;
+  height: 1px;
+  width: 100%;
+  margin-top: 8px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
 /* ================= CREATE POST ================= */
-.feed-create-card {
+.cadet-feed .feed-create-card {
   background: var(--ncc-card-bg, hsl(0, 0%, 98%));
   border-radius: 22px;
   padding: 22px;
@@ -26,19 +35,19 @@
   box-shadow: var(--ncc-shadow-card, 0 2px 12px hsla(262, 40%, 40%, 0.12));
 }
 
-.feed-input-row {
+.cadet-feed .feed-input-row {
   display: flex;
   gap: 14px;
   align-items: center;
 }
 
-.feed-avatar {
+.cadet-feed .feed-avatar {
   width: 46px;
   height: 46px;
   border-radius: 50%;
 }
 
-.feed-input {
+.cadet-feed .feed-input {
   flex: 1;
   background: hsl(0, 0%, 97%);
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -48,12 +57,12 @@
   font-size: 15px;
 }
 
-.feed-input::placeholder {
+.cadet-feed .feed-input::placeholder {
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
 }
 
 /* ================= DIVIDER ================= */
-.divider {
+.cadet-feed .divider {
   width: 100%;
   height: 1px;
   background: rgba(0, 0, 0, 0.08);
@@ -61,18 +70,18 @@
 }
 
 /* ================= BOTTOM ROW ================= */
-.feed-bottom-row {
+.cadet-feed .feed-bottom-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.feed-media-actions {
+.cadet-feed .feed-media-actions {
   display: flex;
   gap: 24px;
 }
 
-.feed-media-actions button {
+.cadet-feed .feed-media-actions button {
   background: none;
   border: none;
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
@@ -81,7 +90,7 @@
   cursor: pointer;
 }
 
-.feed-post-btn {
+.cadet-feed .feed-post-btn {
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   color: white;
   border: none;
@@ -96,7 +105,7 @@
 }
 
 /* ================= FEED CARD ================= */
-.feed-card {
+.cadet-feed .feed-card {
   background: var(--ncc-card-bg, hsl(0, 0%, 98%));
   border-radius: 22px;
   padding: 22px;
@@ -105,18 +114,18 @@
   box-shadow: var(--ncc-shadow-card, 0 2px 12px hsla(262, 40%, 40%, 0.12));
 }
 
-.feed-card-header {
+.cadet-feed .feed-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.feed-user {
+.cadet-feed .feed-user {
   display: flex;
   gap: 12px;
 }
 
-.feed-role {
+.cadet-feed .feed-role {
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   color: white;
   font-size: 11px;
@@ -125,26 +134,26 @@
   margin-left: 6px;
 }
 
-.feed-meta {
+.cadet-feed .feed-meta {
   font-size: 12px;
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
 }
 
-.feed-text {
+.cadet-feed .feed-text {
   margin-top: 12px;
   font-size: 15px;
   color: var(--ncc-text-dark, hsl(225, 25%, 12%));
 }
 
-.feed-post-image,
-.feed-post-video {
+.cadet-feed .feed-post-image,
+.cadet-feed .feed-post-video {
   width: 100%;
   border-radius: 16px;
   margin-top: 14px;
 }
 
 /* ================= POST STATISTICS ================= */
-.post-stats {
+.cadet-feed .post-stats {
   display: flex;
   gap: 16px;
   margin-top: 12px;
@@ -154,14 +163,14 @@
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
 }
 
-.stat-item {
+.cadet-feed .stat-item {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 /* ================= ACTION ROW ================= */
-.feed-actions-row {
+.cadet-feed .feed-actions-row {
   display: flex;
   gap: 22px;
   margin-top: 16px;
@@ -169,7 +178,7 @@
   cursor: pointer;
 }
 
-.feed-action-btn {
+.cadet-feed .feed-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -182,12 +191,12 @@
   transition: background 0.2s, color 0.2s;
 }
 
-.feed-action-btn:hover {
+.cadet-feed .feed-action-btn:hover {
   background: hsla(262, 83%, 58%, 0.08);
   color: var(--ncc-primary, hsl(262, 83%, 58%));
 }
 
-.feed-action-count {
+.cadet-feed .feed-action-count {
   background: hsla(262, 83%, 58%, 0.15);
   border: 1px solid hsla(262, 83%, 58%, 0.3);
   color: var(--ncc-primary, hsl(262, 83%, 58%));
@@ -198,21 +207,21 @@
 }
 
 /* ================= THREE DOT MENU ================= */
-.menu-wrapper {
+.cadet-feed .menu-wrapper {
   position: relative;
 }
 
-.menu-wrapper svg {
+.cadet-feed .menu-wrapper svg {
   cursor: pointer;
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
 }
 
-.menu-wrapper svg:hover {
+.cadet-feed .menu-wrapper svg:hover {
   color: var(--ncc-text-dark, hsl(225, 25%, 12%));
 }
 
 /* ================= DROPDOWN ================= */
-.menu-dropdown {
+.cadet-feed .menu-dropdown {
   position: absolute;
   top: 30px;
   right: 0;
@@ -226,7 +235,7 @@
   animation: dropdownFade 0.15s ease;
 }
 
-.menu-dropdown button {
+.cadet-feed .menu-dropdown button {
   width: 100%;
   padding: 12px 16px;
   background: none;
@@ -238,16 +247,16 @@
   transition: background 0.2s;
 }
 
-.menu-dropdown button:hover {
+.cadet-feed .menu-dropdown button:hover {
   background: hsl(0, 0%, 95%);
 }
 
 /* DELETE */
-.menu-dropdown button.danger {
+.cadet-feed .menu-dropdown button.danger {
   color: #ef4444;
 }
 
-.menu-dropdown button.danger:hover {
+.cadet-feed .menu-dropdown button.danger:hover {
   background: rgba(239, 68, 68, 0.15);
 }
 
@@ -264,7 +273,7 @@
 }
 
 /* ================= MODAL ================= */
-.edit-modal-overlay {
+.cadet-feed .edit-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
@@ -275,7 +284,7 @@
   z-index: 9999;
 }
 
-.edit-modal {
+.cadet-feed .edit-modal {
   width: 520px;
   max-width: 92vw;
   background: var(--ncc-card-bg, hsl(0, 0%, 98%));
@@ -287,40 +296,40 @@
 }
 
 @media (max-width: 768px) {
-  .feed-wrapper {
+  .cadet-feed .feed-wrapper {
     padding: 20px;
   }
 
-  .feed-input-row {
+  .cadet-feed .feed-input-row {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .feed-bottom-row {
+  .cadet-feed .feed-bottom-row {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
   }
 
-  .feed-media-actions {
+  .cadet-feed .feed-media-actions {
     justify-content: space-between;
   }
 }
 
-.edit-modal-header {
+.cadet-feed .edit-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 18px;
 }
 
-.comment-header-actions {
+.cadet-feed .comment-header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.comment-sort-select {
+.cadet-feed .comment-sort-select {
   background: hsl(0, 0%, 97%);
   color: var(--ncc-text-dark, hsl(225, 25%, 12%));
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -330,27 +339,27 @@
   cursor: pointer;
 }
 
-.comment-user-info {
+.cadet-feed .comment-user-info {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.pinned-icon {
+.cadet-feed .pinned-icon {
   color: var(--ncc-primary, hsl(262, 83%, 58%));
 }
 
-.pinned-comment {
+.cadet-feed .pinned-comment {
   background: hsla(262, 83%, 58%, 0.08);
   border-left: 3px solid var(--ncc-primary, hsl(262, 83%, 58%));
 }
 
-.view-replies-section {
+.cadet-feed .view-replies-section {
   margin-top: 8px;
   margin-left: 20px;
 }
 
-.view-replies-btn {
+.cadet-feed .view-replies-btn {
   background: none;
   border: none;
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
@@ -363,22 +372,22 @@
   transition: color 0.2s;
 }
 
-.view-replies-btn:hover {
+.cadet-feed .view-replies-btn:hover {
   color: var(--ncc-primary, hsl(262, 83%, 58%));
 }
 
 /* ================= MENTIONS ================= */
-.mention {
+.cadet-feed .mention {
   color: var(--ncc-primary, hsl(262, 83%, 58%));
   font-weight: 600;
   cursor: pointer;
 }
 
-.mention:hover {
+.cadet-feed .mention:hover {
   text-decoration: underline;
 }
 
-.edit-textarea {
+.cadet-feed .edit-textarea {
   width: 100%;
   min-height: 140px;
   background: hsl(0, 0%, 97%);
@@ -389,7 +398,7 @@
   resize: none;
 }
 
-.edit-save-btn {
+.cadet-feed .edit-save-btn {
   margin-top: 22px;
   width: 100%;
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
@@ -404,13 +413,13 @@
 }
 
 /* ================= COMMENTS ================= */
-.comment-popup-list {
+.cadet-feed .comment-popup-list {
   max-height: 400px;
   overflow-y: auto;
   margin-bottom: 16px;
 }
 
-.comment-item-popup {
+.cadet-feed .comment-item-popup {
   background: hsl(0, 0%, 97%);
   border-radius: 14px;
   padding: 14px 16px;
@@ -418,26 +427,26 @@
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.comment-header-row {
+.cadet-feed .comment-header-row {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 6px;
 }
 
-.comment-time {
+.cadet-feed .comment-time {
   font-size: 12px;
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
 }
 
-.comment-actions {
+.cadet-feed .comment-actions {
   display: flex;
   gap: 16px;
   margin-top: 8px;
   align-items: center;
 }
 
-.comment-action-btn {
+.cadet-feed .comment-action-btn {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -447,27 +456,27 @@
   transition: color 0.2s;
 }
 
-.comment-action-btn:hover {
+.cadet-feed .comment-action-btn:hover {
   color: var(--ncc-primary, hsl(262, 83%, 58%));
 }
 
-.comment-delete {
+.cadet-feed .comment-delete {
   font-size: 13px;
   color: #f87171;
   cursor: pointer;
   transition: color 0.2s;
 }
 
-.comment-delete:hover {
+.cadet-feed .comment-delete:hover {
   color: #ef4444;
 }
 
 /* ================= COMMENT EDIT MODE ================= */
-.comment-edit-mode {
+.cadet-feed .comment-edit-mode {
   margin-top: 8px;
 }
 
-.comment-edit-textarea {
+.cadet-feed .comment-edit-textarea {
   width: 100%;
   min-height: 60px;
   background: hsl(0, 0%, 97%);
@@ -480,12 +489,12 @@
   margin-bottom: 8px;
 }
 
-.comment-edit-actions {
+.cadet-feed .comment-edit-actions {
   display: flex;
   gap: 8px;
 }
 
-.comment-save-btn {
+.cadet-feed .comment-save-btn {
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   color: white;
   border: none;
@@ -496,7 +505,7 @@
   cursor: pointer;
 }
 
-.comment-cancel-btn {
+.cadet-feed .comment-cancel-btn {
   background: hsl(0, 0%, 90%);
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
   border: 1px solid rgba(0, 0, 0, 0.1);
@@ -507,21 +516,21 @@
 }
 
 /* ================= REPLIES ================= */
-.replies-container {
+.cadet-feed .replies-container {
   margin-top: 12px;
   margin-left: 20px;
   padding-left: 16px;
   border-left: 2px solid hsla(262, 83%, 58%, 0.3);
 }
 
-.replies-container.nested-reply {
+.cadet-feed .replies-container.nested-reply {
   margin-left: 30px;
   margin-top: 8px;
   padding-left: 12px;
   border-left: 2px solid hsla(262, 83%, 58%, 0.2);
 }
 
-.reply-item {
+.cadet-feed .reply-item {
   background: hsl(0, 0%, 98%);
   border-radius: 10px;
   padding: 10px 12px;
@@ -529,27 +538,27 @@
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.reply-item .comment-header-row {
+.cadet-feed .reply-item .comment-header-row {
   margin-bottom: 4px;
 }
 
-.reply-item p {
+.cadet-feed .reply-item p {
   font-size: 14px;
   margin: 4px 0;
 }
 
-.reply-item .comment-actions {
+.cadet-feed .reply-item .comment-actions {
   margin-top: 6px;
 }
 
 /* ================= REPLY INPUT ================= */
-.reply-input-container {
+.cadet-feed .reply-input-container {
   margin-top: 12px;
   margin-left: 20px;
   padding-left: 16px;
 }
 
-.reply-textarea {
+.cadet-feed .reply-textarea {
   width: 100%;
   min-height: 50px;
   background: hsl(0, 0%, 97%);
@@ -562,12 +571,12 @@
   margin-bottom: 8px;
 }
 
-.reply-actions {
+.cadet-feed .reply-actions {
   display: flex;
   gap: 8px;
 }
 
-.reply-send-btn {
+.cadet-feed .reply-send-btn {
   background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   color: white;
   border: none;
@@ -578,7 +587,7 @@
   cursor: pointer;
 }
 
-.reply-cancel-btn {
+.cadet-feed .reply-cancel-btn {
   background: hsl(0, 0%, 90%);
   color: var(--ncc-text-muted, hsl(225, 15%, 40%));
   border: 1px solid rgba(0, 0, 0, 0.1);

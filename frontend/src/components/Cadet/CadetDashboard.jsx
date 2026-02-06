@@ -66,11 +66,11 @@ export default function CadetDashboard() {
 
   return (
     <>
-      {showReset && (
-        <ResetPasswordModal onClose={() => setShowReset(false)} />
-      )}
-
-      <div className="layout">
+      <div className="cadet-dashboard">
+        {showReset && (
+          <ResetPasswordModal onClose={() => setShowReset(false)} />
+        )}
+        <div className="layout">
 
         {/* ================= SIDEBAR ================= */}
         <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
@@ -255,7 +255,11 @@ export default function CadetDashboard() {
             </>
           )}
         </main>
+        </div>
       </div>
     </>
   );
 }
+
+
+
