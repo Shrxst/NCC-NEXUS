@@ -1,18 +1,16 @@
 import React from 'react';
 
 const ChatTabs = ({ userRole, activeTab, onTabChange }) => {
-  
-  // Define tab configuration based on requirements
   const getTabsForRole = (role) => {
     const baseTabs = ['All', 'Unread', 'Groups'];
-    
-    switch (role.toLowerCase()) {
+
+    switch (String(role || '').toLowerCase()) {
       case 'cadet':
-        return [...baseTabs, 'Alumni', 'ANO'];
+        return [...baseTabs, 'Cadets', 'SUO', 'Alumni', 'ANO'];
       case 'suo':
         return [...baseTabs, 'Cadets', 'Alumni', 'ANO'];
       case 'alumni':
-        return [...baseTabs, 'Cadets', 'ANO'];
+        return [...baseTabs, 'Cadets', 'SUO', 'ANO'];
       case 'ano':
         return [...baseTabs, 'Cadets', 'SUO', 'Alumni'];
       default:

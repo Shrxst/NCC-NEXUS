@@ -1,41 +1,44 @@
 import React, { useState } from 'react';
 
-const MessageInput = ({ onSend }) => {
+const MessageInput = ({ onSend, onTyping, disabled = false }) => {
   const [text, setText] = useState('');
 
   const handleSend = () => {
-    if (text.trim()) {
-      onSend(text);
-      setText('');
-    }
+    const trimmed = text.trim();
+    if (!trimmed || disabled) return;
+    onSend(trimmed);
+    setText('');
+    if (onTyping) onTyping(false);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+  const handleChange = (event) => {
+    const next = event.target.value;
+    setText(next);
+    if (onTyping) onTyping(next.trim().length > 0);
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
       handleSend();
     }
   };
 
   return (
-    <div className="chat-input-area">
-      {/* Emoji Icon (Placeholder) */}
-      <span style={{ fontSize: '1.5rem', cursor: 'pointer', color: '#8696a0' }}>
-        😊
-      </span>
+    <div className="chat-input-area message-input-container">
+      <span style={{ fontSize: '1.2rem', color: '#8696a0' }}>+</span>
 
-      {/* Text Area */}
       <input
-        className="message-field"
-        placeholder="Type a message"
+        className="message-field message-input"
+        placeholder={disabled ? 'Select a chat to start messaging' : 'Type a message'}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={handleChange}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
       />
 
-      {/* Send Button */}
-      <button className="send-btn" onClick={handleSend}>
-        ➤
+      <button className="send-btn send-button" onClick={handleSend} disabled={disabled}>
+        Send
       </button>
     </div>
   );

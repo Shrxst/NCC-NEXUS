@@ -249,18 +249,19 @@
 
 /* Input Area */
 .chat-input-area {
-    padding: 10px 16px;
+    padding: 10px 16px 12px;
     background-color: var(--chat-header-bg);
     display: flex;
     align-items: center;
     gap: 12px;
+    box-sizing: border-box;
 }
 
 .message-field {
     flex: 1;
     background-color: var(--chat-input-bg);
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 12px;
     color: white;
     resize: none;
@@ -281,6 +282,62 @@
 
 .send-btn:hover {
     color: var(--chat-primary);
+}
+
+/* Production input row alignment */
+.message-input-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow: visible;
+}
+
+.message-input {
+    flex: 1;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: none;
+    outline: none;
+    line-height: 44px;
+    box-sizing: border-box;
+}
+
+.send-button {
+    height: 44px;
+    padding: 0 18px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 1rem;
+    line-height: 44px;
+    background: #16c79a;
+    color: #fff;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    min-width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+.send-button:hover {
+    background: #12a87f;
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.send-button:active {
+    transform: translateY(0);
+}
+
+.send-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
 /* Empty State */

@@ -1,165 +1,453 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ChatSidebar from './ChatSidebar';
 import ChatWindow from './ChatWindow';
 import './chatCommon.css';
+import {
+  getAuthContext,
+  fetchChatListApi,
+  fetchCollegeUsersApi,
+  fetchRoomMessagesApi,
+  markAsReadApi,
+  createDirectRoomApi,
+  sendMessageApi,
+} from '../../features/ui/chatApi';
+import {
+  connectChatSocket,
+  disconnectChatSocket,
+  bindChatSocketEvents,
+  getSocket,
+  joinSocketRoom,
+  leaveSocketRoom,
+  sendSocketMessage,
+  emitTyping,
+} from '../../features/ui/socket';
 
-// ---------------- DUMMY DATA GENERATOR ---------------- //
-const INITIAL_CONVERSATIONS = [
-  {
-    id: "1",
-    name: "Alpha Platoon",
-    type: "group",
-    roleCategory: "Groups",
-    lastMessage: "Parade schedule updated.",
-    timestamp: "10:30 AM",
-    unread: 2,
-    online: true,
-    messages: [
-      { id: 1, sender: "other", text: "Attention everyone!", time: "10:00 AM" },
-      { id: 2, sender: "other", text: "Parade schedule updated.", time: "10:30 AM" }
-    ]
-  },
-  {
-    id: "2",
-    name: "SUO Rajesh Kumar",
-    type: "individual",
-    roleCategory: "SUO",
-    lastMessage: "Sir, reporting for duty.",
-    timestamp: "Yesterday",
-    unread: 0,
-    online: false,
-    messages: [
-      { id: 1, sender: "me", text: "Report status?", time: "09:00 AM" },
-      { id: 2, sender: "other", text: "Sir, reporting for duty.", time: "09:15 AM" }
-    ]
-  },
-  {
-    id: "3",
-    name: "Col. Sharma (ANO)",
-    type: "individual",
-    roleCategory: "ANO",
-    lastMessage: "Please submit the forms.",
-    timestamp: "Tuesday",
-    unread: 1,
-    online: true,
-    messages: [
-      { id: 1, sender: "other", text: "Please submit the forms.", time: "Tuesday" }
-    ]
-  },
-  {
-    id: "4",
-    name: "Cdt. Anjali Singh",
-    type: "individual",
-    roleCategory: "Cadets",
-    lastMessage: "Okay, I will check.",
-    timestamp: "Monday",
-    unread: 0,
-    online: true,
-    messages: [
-      { id: 1, sender: "me", text: "Check your uniform.", time: "Monday" },
-      { id: 2, sender: "other", text: "Okay, I will check.", time: "Monday" }
-    ]
-  }
-];
+function formatTimestamp(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function toConversation(item) {
+  return {
+    id: item.entry_id,
+    roomId: item.room_id ? Number(item.room_id) : null,
+    itemType: item.item_type || 'room',
+    peerUserId: item.peer_user_id ? Number(item.peer_user_id) : null,
+    peerRole: item.peer_role || null,
+    name: item.room_name || 'Direct Chat',
+    type: item.room_type === 'group' ? 'group' : 'individual',
+    roleCategory: item.role_category || 'All',
+    lastMessage: item.last_message?.body || '',
+    lastMessageSender: item.last_message?.sender_role || '',
+    timestamp: formatTimestamp(item.last_message_at || item.last_message?.created_at),
+    unread: Number(item.unread_count || 0),
+    online: Boolean(item.online),
+    participants: item.participants || [],
+    canStartChat: item.can_start_chat !== false,
+  };
+}
+
+function mergeMessages(existing, incoming) {
+  const map = new Map(existing.map((msg) => [Number(msg.message_id), msg]));
+  map.set(Number(incoming.message_id), incoming);
+  return [...map.values()].sort((a, b) => Number(a.message_id) - Number(b.message_id));
+}
 
 const ChatLayout = ({ userRole = 'cadet' }) => {
-  // State for Conversations
-  const [conversations, setConversations] = useState(INITIAL_CONVERSATIONS);
-  
-  // State for UI Logic
+  const [conversations, setConversations] = useState([]);
+  const [messagesByRoom, setMessagesByRoom] = useState({});
+  const [typingByRoom, setTypingByRoom] = useState({});
+
   const [selectedChatId, setSelectedChatId] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
+
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Mobile Responsiveness Logic
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // Listener for window resize
+  const [loadingList, setLoadingList] = useState(false);
+  const [listError, setListError] = useState('');
+
+  const activeTabRef = useRef('All');
+  const selectedRoomRef = useRef(null);
+  const joinedRoomRef = useRef(null);
+
+  const auth = useMemo(() => getAuthContext(userRole), [userRole]);
+
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    selectedRoomRef.current = selectedRoomId;
+  }, [selectedRoomId]);
+
+  const fetchAndSetList = useCallback(async (filter, options = {}) => {
+    if (!auth.token || !auth.userId) return [];
+
+    const { silent = false } = options;
+    if (!silent) setLoadingList(true);
+    setListError('');
+
+    const normalizedFilter = String(filter || 'All').toLowerCase();
+
+    try {
+      let chatsPayload = await fetchChatListApi({
+        userId: auth.userId,
+        token: auth.token,
+        filter: normalizedFilter,
+      });
+
+      let entries = (chatsPayload.data?.chats || []).map(toConversation);
+
+      if (entries.length === 0) {
+        const usersPayload = await fetchCollegeUsersApi({
+          userId: auth.userId,
+          token: auth.token,
+          filter: normalizedFilter,
+        });
+
+        entries = (usersPayload.data?.users || []).map(toConversation);
+      }
+
+      if (entries.length === 0 && normalizedFilter !== 'all') {
+        const allChatsPayload = await fetchChatListApi({
+          userId: auth.userId,
+          token: auth.token,
+          filter: 'all',
+        });
+
+        let allEntries = (allChatsPayload.data?.chats || []).map(toConversation);
+
+        if (allEntries.length === 0) {
+          const allUsersPayload = await fetchCollegeUsersApi({
+            userId: auth.userId,
+            token: auth.token,
+            filter: 'all',
+          });
+          allEntries = (allUsersPayload.data?.users || []).map(toConversation);
+        }
+
+        if (allEntries.length > 0) {
+          setActiveTab('All');
+          entries = allEntries;
+        }
+      }
+
+      setConversations(entries);
+      return entries;
+    } catch (error) {
+      setConversations([]);
+      setListError(error.message || 'Failed to load users.');
+      return [];
+    } finally {
+      if (!silent) setLoadingList(false);
+    }
+  }, [auth.token, auth.userId]);
+
+  const fetchRoomMessages = useCallback(async (roomId) => {
+    if (!auth.token || !roomId) return;
+
+    try {
+      const payload = await fetchRoomMessagesApi({ roomId, token: auth.token, limit: 50 });
+      const messages = payload.data?.messages || [];
+
+      setMessagesByRoom((prev) => ({ ...prev, [roomId]: messages }));
+
+      const last = messages[messages.length - 1];
+      if (last && Number(last.sender_user_id) !== Number(auth.userId)) {
+        await markAsReadApi({
+          roomId,
+          token: auth.token,
+          upToMessageId: last.message_id,
+        }).catch(() => {});
+      }
+    } catch (error) {
+      console.error('Failed to load messages:', error.message);
+    }
+  }, [auth.token, auth.userId]);
+
+  const selectRoom = useCallback(async (roomId) => {
+    const entryId = `room:${Number(roomId)}`;
+    setSelectedChatId(entryId);
+    setSelectedRoomId(Number(roomId));
+    await fetchRoomMessages(Number(roomId));
+
+    setConversations((prev) => prev.map((chat) => (
+      Number(chat.roomId) === Number(roomId) ? { ...chat, unread: 0 } : chat
+    )));
+  }, [fetchRoomMessages]);
+
+  const ensureRoomForContact = useCallback(async (chatItem) => {
+    if (chatItem.roomId) return chatItem.roomId;
+    if (!chatItem.peerUserId) return null;
+
+    const payload = await createDirectRoomApi({
+      peerUserId: chatItem.peerUserId,
+      token: auth.token,
+    });
+
+    const roomId = Number(payload.data?.room?.room_id || 0);
+    if (!roomId) return null;
+
+    const entries = await fetchAndSetList(activeTabRef.current, { silent: true });
+    const found = entries.find((entry) => Number(entry.roomId) === roomId);
+
+    if (found) {
+      setSelectedChatId(found.id);
+    }
+
+    return roomId;
+  }, [auth.token, fetchAndSetList]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // --- Handlers ---
+  useEffect(() => {
+    fetchAndSetList(activeTab);
+  }, [activeTab, fetchAndSetList]);
 
-  // 1. Handle sending a message
-  const handleSendMessage = (text) => {
-    if (!text.trim() || !selectedChatId) return;
+  useEffect(() => {
+    if (!auth.token || !auth.userId) {
+      setListError('Login required.');
+      return undefined;
+    }
 
-    const newMessage = {
-      id: Date.now(),
-      sender: "me",
-      text: text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    connectChatSocket(auth.token);
+
+    const handleNewMessage = (message) => {
+      const roomId = Number(message.room_id);
+
+      setMessagesByRoom((prev) => ({
+        ...prev,
+        [roomId]: mergeMessages(prev[roomId] || [], message),
+      }));
+
+      setConversations((prev) => {
+        const idx = prev.findIndex((chat) => Number(chat.roomId) === roomId);
+        if (idx === -1) {
+          fetchAndSetList(activeTabRef.current, { silent: true });
+          return prev;
+        }
+
+        const current = prev[idx];
+        const isActive = Number(selectedRoomRef.current) === roomId;
+        const fromSelf = Number(message.sender_user_id) === Number(auth.userId);
+
+        const updated = {
+          ...current,
+          id: `room:${roomId}`,
+          roomId,
+          itemType: 'room',
+          lastMessage: message.body,
+          lastMessageSender: message.sender_role,
+          timestamp: formatTimestamp(message.created_at),
+          unread: isActive || fromSelf ? 0 : current.unread + 1,
+        };
+
+        const next = [...prev];
+        next.splice(idx, 1);
+        return [updated, ...next];
+      });
+
+      if (Number(selectedRoomRef.current) === roomId && Number(message.sender_user_id) !== Number(auth.userId)) {
+        markAsReadApi({
+          roomId,
+          token: auth.token,
+          upToMessageId: message.message_id,
+        }).catch(() => {});
+      }
     };
 
-    setConversations(prev => prev.map(chat => {
-      if (chat.id === selectedChatId) {
+    const handleMessageDeleted = ({ room_id: roomId, message_id: messageId }) => {
+      const rid = Number(roomId);
+      const mid = Number(messageId);
+
+      setMessagesByRoom((prev) => ({
+        ...prev,
+        [rid]: (prev[rid] || []).filter((msg) => Number(msg.message_id) !== mid),
+      }));
+
+      fetchAndSetList(activeTabRef.current, { silent: true });
+    };
+
+    const handleReadUpdate = ({ room_id: roomId, user_id: userId }) => {
+      if (Number(userId) !== Number(auth.userId)) return;
+
+      setConversations((prev) => prev.map((chat) => (
+        Number(chat.roomId) === Number(roomId) ? { ...chat, unread: 0 } : chat
+      )));
+    };
+
+    const handleTyping = ({ room_id: roomId, user_id: userId, is_typing: isTyping }) => {
+      if (Number(userId) === Number(auth.userId)) return;
+
+      setTypingByRoom((prev) => {
+        const roomKey = Number(roomId);
+        const current = new Set(prev[roomKey] || []);
+
+        if (isTyping) current.add(Number(userId));
+        else current.delete(Number(userId));
+
         return {
-          ...chat,
-          messages: [...chat.messages, newMessage],
-          lastMessage: text,
-          timestamp: "Just now"
+          ...prev,
+          [roomKey]: [...current],
         };
+      });
+    };
+
+    bindChatSocketEvents({
+      onConnect: () => {
+        if (selectedRoomRef.current) {
+          joinSocketRoom(selectedRoomRef.current);
+        }
+      },
+      onError: (payload) => {
+        if (payload?.message) {
+          console.error('Socket error:', payload.message);
+        }
+      },
+      onNewMessage: handleNewMessage,
+      onMessageDeleted: handleMessageDeleted,
+      onReadUpdate: handleReadUpdate,
+      onTyping: handleTyping,
+    });
+
+    return () => {
+      disconnectChatSocket();
+      joinedRoomRef.current = null;
+      selectedRoomRef.current = null;
+    };
+  }, [auth.token, auth.userId, fetchAndSetList]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const nextRoom = selectedRoomId;
+    const previousRoom = joinedRoomRef.current;
+
+    if (previousRoom && previousRoom !== nextRoom) {
+      leaveSocketRoom(previousRoom);
+    }
+
+    if (nextRoom && previousRoom !== nextRoom) {
+      joinSocketRoom(nextRoom);
+    }
+
+    joinedRoomRef.current = nextRoom || null;
+  }, [selectedRoomId]);
+
+  const handleSelectChat = useCallback(async (chatId) => {
+    const chat = conversations.find((entry) => entry.id === chatId);
+    if (!chat || chat.canStartChat === false) return;
+
+    let roomId = chat.roomId;
+    if (!roomId) {
+      try {
+        roomId = await ensureRoomForContact(chat);
+      } catch (error) {
+        setListError(error.message || 'Failed to start chat.');
+        return;
       }
-      return chat;
-    }));
-  };
+    }
 
-  // 2. Handle Selecting a Chat (clears unread)
-  const handleSelectChat = (chatId) => {
-    setSelectedChatId(chatId);
-    setConversations(prev => prev.map(chat => 
-      chat.id === chatId ? { ...chat, unread: 0 } : chat
-    ));
-  };
+    if (!roomId) return;
+    await selectRoom(roomId);
+  }, [conversations, ensureRoomForContact, selectRoom]);
 
-  // 3. Handle Back Button (Mobile)
-  const handleBackToSidebar = () => {
+  const handleSendMessage = useCallback(async (text) => {
+    const roomId = Number(selectedRoomRef.current);
+    const body = String(text || '').trim();
+
+    if (!roomId || !body) return;
+
+    const sentViaSocket = sendSocketMessage({ roomId, body, messageType: 'text' });
+    if (sentViaSocket) return;
+
+    try {
+      await sendMessageApi({ roomId, token: auth.token, body, messageType: 'text' });
+    } catch (error) {
+      setListError(error.message || 'Failed to send message.');
+    }
+  }, [auth.token]);
+
+  const handleTyping = useCallback((isTyping) => {
+    const roomId = Number(selectedRoomRef.current);
+    if (!roomId) return;
+    emitTyping({ roomId, isTyping });
+  }, []);
+
+  const handleBackToSidebar = useCallback(() => {
     setSelectedChatId(null);
-  };
+    setSelectedRoomId(null);
+  }, []);
 
-  // 4. Filtering Logic
-  const filteredConversations = conversations.filter(chat => {
-    const matchesSearch = chat.name.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Tab filtering logic
-    if (activeTab === 'All') return matchesSearch;
-    if (activeTab === 'Unread') return matchesSearch && chat.unread > 0;
-    
-    // Match role categories (Groups, Cadets, ANO, etc.)
-    return matchesSearch && chat.roleCategory === activeTab;
-  });
+  const handleRetry = useCallback(() => {
+    fetchAndSetList(activeTabRef.current);
+  }, [fetchAndSetList]);
 
-  // Get current active chat object
-  const activeChatData = conversations.find(c => c.id === selectedChatId);
+  const filteredBySearch = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((chat) => String(chat.name || '').toLowerCase().includes(q));
+  }, [conversations, searchQuery]);
+
+  const activeChatData = useMemo(() => {
+    if (!selectedChatId && !selectedRoomId) return null;
+
+    const byId = conversations.find((entry) => entry.id === selectedChatId);
+    if (byId) return byId;
+
+    if (selectedRoomId) {
+      return conversations.find((entry) => Number(entry.roomId) === Number(selectedRoomId)) || null;
+    }
+
+    return null;
+  }, [conversations, selectedChatId, selectedRoomId]);
+
+  const activeMessages = activeChatData?.roomId
+    ? (messagesByRoom[activeChatData.roomId] || [])
+    : [];
+
+  const typingUsers = activeChatData?.roomId
+    ? (typingByRoom[activeChatData.roomId] || [])
+    : [];
 
   return (
     <div className="ncc-chat-container">
-      
-      {/* Sidebar - Hidden on mobile if chat is open */}
-      <ChatSidebar 
-        isHidden={isMobile && selectedChatId !== null}
-        userRole={userRole}
+      <ChatSidebar
+        isHidden={isMobile && Boolean(selectedChatId)}
+        userRole={auth.role}
+        currentUserName={auth.userName}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        conversations={filteredConversations}
+        conversations={filteredBySearch}
         selectedChatId={selectedChatId}
         onSelectChat={handleSelectChat}
+        isLoading={loadingList}
+        error={listError}
+        onRetry={handleRetry}
       />
 
-      {/* Chat Window - Hidden on mobile if no chat selected */}
-      <ChatWindow 
-        isHidden={isMobile && selectedChatId === null}
+      <ChatWindow
+        isHidden={isMobile && !selectedChatId}
         chatData={activeChatData}
+        messages={activeMessages}
         onSendMessage={handleSendMessage}
-        onBack={handleBackToSidebar} // For mobile
+        onTyping={handleTyping}
+        onBack={handleBackToSidebar}
         isMobile={isMobile}
+        currentUserId={auth.userId}
+        typingUsers={typingUsers}
       />
-
     </div>
   );
 };

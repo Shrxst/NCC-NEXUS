@@ -2,50 +2,51 @@ import React from 'react';
 import ChatTabs from './ChatTabs';
 import ChatList from './ChatList';
 
-const ChatSidebar = ({ 
-  isHidden, 
-  userRole, 
-  activeTab, 
-  setActiveTab, 
-  searchQuery, 
-  setSearchQuery, 
-  conversations, 
-  selectedChatId, 
-  onSelectChat 
+const ChatSidebar = ({
+  isHidden,
+  userRole,
+  currentUserName,
+  activeTab,
+  setActiveTab,
+  searchQuery,
+  setSearchQuery,
+  conversations,
+  selectedChatId,
+  onSelectChat,
+  isLoading,
+  error,
+  onRetry,
 }) => {
-  
+  const initials = String(currentUserName || 'Me').substring(0, 2).toUpperCase();
+
   return (
     <div className={`chat-sidebar ${isHidden ? 'hidden' : ''}`}>
-      {/* Header / Search */}
       <div className="chat-header">
-        <div className="avatar-circle" style={{width: 35, height: 35, fontSize: '0.8rem'}}>
-          ME
+        <div className="avatar-circle" style={{ width: 35, height: 35, fontSize: '0.8rem' }}>
+          {initials}
         </div>
-        <div style={{fontWeight: 'bold'}}>NCC Chats</div>
+        <div style={{ fontWeight: 'bold' }}>NCC Chats</div>
       </div>
 
       <div className="sidebar-search">
-        <input 
-          type="text" 
-          placeholder="Search or start new chat" 
+        <input
+          type="text"
+          placeholder="Search chats"
           className="search-input"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
       </div>
 
-      {/* Dynamic Tabs based on Role */}
-      <ChatTabs 
-        userRole={userRole} 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab} 
-      />
+      <ChatTabs userRole={userRole} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* List of Conversations */}
-      <ChatList 
-        chats={conversations} 
-        selectedId={selectedChatId} 
-        onSelect={onSelectChat} 
+      <ChatList
+        chats={conversations}
+        selectedId={selectedChatId}
+        onSelect={onSelectChat}
+        isLoading={isLoading}
+        error={error}
+        onRetry={onRetry}
       />
     </div>
   );
