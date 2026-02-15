@@ -8,6 +8,7 @@ const db = require("./db/knex");
 // Import Routes
 const authRoutes = require("./routes/auth.routes");
 const anoRoutes = require("./routes/ano.routes");
+const cadetRoutes = require("./routes/cadet.routes");
 // const chatRoutes = require("./routes/chat.routes"); // Uncomment when chat is ready
 
 const app = express();
@@ -28,7 +29,7 @@ app.get("/", async (req, res) => {
       timestamp: new Date().toISOString() 
     });
   } catch (err) {
-    console.error("❌ Database Connection Error:", err);
+    console.error("Database Connection Error:", err);
     res.status(500).json({ 
       status: "Error", 
       message: "Database not connected" 
@@ -47,6 +48,7 @@ app.use("/api/auth", authRoutes);
 // ANO Dashboard (Stats, Add/Edit/Delete Cadet, Send Emails)
 // This mounts ano routes at /api/ano
 app.use("/api/ano", anoRoutes);
+app.use("/api/cadet", cadetRoutes);
 
 // Chat System (Existing)
 // app.use("/api/chat", chatRoutes); // Uncomment when ready
@@ -55,7 +57,7 @@ app.use("/api/ano", anoRoutes);
 // 3. Global Error Handler
 // ------------------------------------------
 app.use((err, req, res, next) => {
-  console.error("🔥 Global Error:", err.stack);
+  console.error("Global Error:", err.stack);
   res.status(500).json({ 
     message: "Internal Server Error", 
     error: process.env.NODE_ENV === "development" ? err.message : undefined 
@@ -67,7 +69,8 @@ app.use((err, req, res, next) => {
 // ------------------------------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
-  console.log(`   👉 Auth: /api/auth`);
-  console.log(`   👉 ANO:  /api/ano`);
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Auth: /api/auth`);
+  console.log(`ANO:  /api/ano`);
+  console.log(`Cadet:/api/cadet`);
 });

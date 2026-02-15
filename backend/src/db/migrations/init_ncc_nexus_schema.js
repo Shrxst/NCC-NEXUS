@@ -63,59 +63,61 @@ exports.up = async function (knex) {
   });
 
   // ======================
-  // 6. CADET DESIGNATIONS
-  // ======================
-  await knex.schema.createTable("cadet_designations", (t) => {
-    t.increments("id").primary();
-    t.string("name").unique().notNullable();
-  });
-
-  // ======================
-  // 7. CADET PROFILES
+  // 6. CADET PROFILES
   // ======================
   await knex.schema.createTable("cadet_profiles", (t) => {
-    t.string("regimental_no").primary();
-    t.integer("user_id")
-      .unique()
-      .references("user_id")
-      .inTable("users")
-      .onDelete("CASCADE");
+  t.string("regimental_no").primary();
 
-    t.string("full_name").notNullable();
-    t.string("email").notNullable();
-    t.date("dob");
-    t.integer("joining_year");
+  t.integer("user_id")
+    .unique()
+    .references("user_id")
+    .inTable("users")
+    .onDelete("CASCADE");
 
-    t.integer("college_id")
-      .references("college_id")
-      .inTable("colleges");
+  t.string("full_name").notNullable();
+  t.string("email").notNullable();
+  t.date("dob");
+  t.integer("joining_year");
 
-    t.integer("rank_id")
-      .references("id")
-      .inTable("cadet_ranks");
-  });
+  t.integer("college_id")
+    .references("college_id")
+    .inTable("colleges");
+
+  t.integer("rank_id")
+    .references("id")
+    .inTable("cadet_ranks");
+
+  t.text("bio");                
+  t.string("profile_image_url"); 
+});
 
   // ======================
-  // 8. CADET ROLE HISTORY
+  // 7. CADET RANK HISTORY
   // ======================
-  await knex.schema.createTable("cadet_roles", (t) => {
-    t.increments("role_id").primary();
+  await knex.schema.createTable("cadet_rank_history", (t) => {
+    t.increments("id").primary();
 
     t.string("regimental_no")
       .references("regimental_no")
       .inTable("cadet_profiles")
       .onDelete("CASCADE");
 
-    t.integer("designation_id")
+    t.integer("rank_id")
       .references("id")
-      .inTable("cadet_designations");
+      .inTable("cadet_ranks");
 
-    t.date("start_date");
+    t.integer("promoted_by")
+      .references("user_id")
+      .inTable("users");
+
+    t.date("start_date").notNullable();
     t.date("end_date");
+
+    t.timestamp("created_at").defaultTo(knex.fn.now());
   });
 
   // ======================
-  // 9. POSTS
+  // 8. POSTS
   // ======================
   await knex.schema.createTable("posts", (t) => {
     t.increments("post_id").primary();
@@ -140,7 +142,7 @@ exports.up = async function (knex) {
   });
 
   // ======================
-  // 10. COMMENTS
+  // 9. COMMENTS
   // ======================
   await knex.schema.createTable("comments", (t) => {
     t.increments("comment_id").primary();
@@ -162,7 +164,7 @@ exports.up = async function (knex) {
   });
 
   // ======================
-  // 11. POST LIKES
+  // 10. POST LIKES
   // ======================
   await knex.schema.createTable("post_likes", (t) => {
     t.integer("post_id")
@@ -181,7 +183,7 @@ exports.up = async function (knex) {
   });
 
   // ======================
-  // 12. CHAT MESSAGES
+  // 11. CHAT MESSAGES
   // ======================
   await knex.schema.createTable("chat_messages", (t) => {
     t.increments("id").primary();
@@ -196,9 +198,8 @@ exports.down = async function (knex) {
   await knex.schema.dropTableIfExists("post_likes");
   await knex.schema.dropTableIfExists("comments");
   await knex.schema.dropTableIfExists("posts");
-  await knex.schema.dropTableIfExists("cadet_roles");
+  await knex.schema.dropTableIfExists("cadet_rank_history");
   await knex.schema.dropTableIfExists("cadet_profiles");
-  await knex.schema.dropTableIfExists("cadet_designations");
   await knex.schema.dropTableIfExists("cadet_ranks");
   await knex.schema.dropTableIfExists("alumni");
   await knex.schema.dropTableIfExists("anos");

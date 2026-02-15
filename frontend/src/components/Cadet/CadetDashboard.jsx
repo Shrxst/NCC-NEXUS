@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   User,
   MapPin,
@@ -11,7 +11,7 @@ import {
 import { MessageSquare } from "lucide-react";
 import ChatLayout from "../ChatCommon/ChatLayout";
 import { useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import "./dashboard.css";
 import logoImage from "../assets/ncc-logo.png";
 import Feed from "./Feed";
@@ -26,38 +26,74 @@ export default function CadetDashboard() {
   const [activeTab, setActiveTab] = useState("profile");
   const [showReset, setShowReset] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const [profileImage, setProfileImage] = useState(
-    "https://images.unsplash.com/photo-1607746882042-944635dfe10e"
-  );
+  const defaultProfileImage = "https://images.unsplash.com/photo-1607746882042-944635dfe10e";
+  const [profileImage, setProfileImage] = useState(defaultProfileImage);
 
   const [profileData, setProfileData] = useState({
-    name: "Shami Dubey",
-    rank: "Sergeant (SGT)",
-    location: "1 PB BN NCC, Ludhiana",
-    bio:
-      "Focused on leadership and community service. Dedicated to the NCC motto: Unity and Discipline.",
+    name: "",
+    rank: "",
+    location: "",
+    bio: "",
   });
 
   const fileInputRef = useRef(null);
 
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
-    if (file) setProfileImage(URL.createObjectURL(file));
+    if (file) {
+      // Local preview only; upload endpoint is not implemented yet.
+      setProfileImage(URL.createObjectURL(file));
+    }
   };
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
 
   const startEditBio = () => {
-    setTempBio(profileData.bio);
+    setTempBio(profileData.bio || "");
     setIsEditingBio(true);
   };
 
-  const saveBio = () => {
-    if (tempBio.trim()) {
-      setProfileData({ ...profileData, bio: tempBio.trim() });
+  const saveBio = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      navigate("/");
+      return;
     }
+
+    const nextBio = tempBio.trim();
+
+    try {
+      const response = await fetch("http://localhost:5000/api/cadet/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          bio: nextBio,
+          profile_image_url: profileImage.startsWith("blob:") ? null : profileImage,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Profile update failed: ${data.message || "Unknown error"}`);
+        return;
+      }
+
+      setProfileData((prev) => ({ ...prev, bio: nextBio }));
+      if (profileImage.startsWith("blob:")) {
+        alert("Bio updated. Image preview is local only until upload API is added.");
+      }
+    } catch (error) {
+      console.error("Save Bio Error:", error);
+      alert("Failed to update profile.");
+    }
+
     setIsEditingBio(false);
   };
 
@@ -65,6 +101,49 @@ export default function CadetDashboard() {
     setIsEditingBio(false);
     setTempBio("");
   };
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+
+    if (!token || role !== "CADET") {
+      navigate("/");
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        setLoadingProfile(true);
+        const response = await fetch("http://localhost:5000/api/cadet/profile", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+          return;
+        }
+
+        setProfileData({
+          name: data.name || "Cadet",
+          rank: data.rank || "Cadet",
+          location: [data.unit, data.city].filter(Boolean).join(", "),
+          bio: data.bio || "Add your bio using edit button.",
+        });
+
+        setProfileImage(data.profile_image_url || defaultProfileImage);
+      } catch (error) {
+        console.error("Fetch Profile Error:", error);
+        alert("Unable to load profile.");
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    fetchProfile();
+  }, [navigate]);
 
   return (
     <>
@@ -151,6 +230,9 @@ export default function CadetDashboard() {
             className="logout-item"
             onClick={() => {
               dispatch(closeCadetSidebar());
+              localStorage.removeItem("token");
+              localStorage.removeItem("role");
+              localStorage.removeItem("user");
               navigate("/");
             }}
           >
@@ -198,9 +280,12 @@ export default function CadetDashboard() {
 
           {activeTab === "profile" && (
             <>
+              {loadingProfile ? (
+                <p className="section-title">Loading profile...</p>
+              ) : null}
               <div className="banner">
                 <div className="profile-photo-wrapper">
-                  <img src={profileImage} className="profile-photo" />
+                  <img src={profileImage} className="profile-photo" alt="Cadet profile" />
                   <button
                     className="camera-icon"
                     onClick={() => fileInputRef.current.click()}
@@ -252,7 +337,7 @@ export default function CadetDashboard() {
                     </div>
                   ) : (
                     <div className="bio-display">
-                      <p className="bio">"{profileData.bio}"</p>
+                      <p className="bio">"{profileData.bio || "Add your bio using edit button."}"</p>
                       <button
                         className="bio-edit-icon"
                         onClick={startEditBio}
