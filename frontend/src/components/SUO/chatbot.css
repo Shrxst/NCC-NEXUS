@@ -1,31 +1,32 @@
+/* SUO chatbot styles aligned with Cadet theme */
 /* ==========================================================================
    CHATBOT MAIN WRAPPER
    Isse Chatbot dashboard ke main area mein sahi se align hoga
    ========================================================================== */
 
-.chatbot-inner-wrapper {
+.suo-chatbot .chatbot-inner-wrapper {
   display: flex;
   flex-direction: column;
-  height: 100%; /* Dashboard ke main content area ki height lega */
+  height: 100%;
   width: 100%;
   position: relative;
-  background-color: #0d1726;
-  overflow: hidden; /* Bahar ka scroll block karega */
+  background: #ffffff;
+  overflow: hidden;
 }
 
 /* Fixed Top Bar inside Chatbot */
-.fixed-top-bar {
+.suo-chatbot .fixed-top-bar {
   padding: 20px 40px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background-color: #0d1726;
-  flex-shrink: 0; /* Isse header apni jagah fix rahega */
+  border-bottom: 1px solid rgba(124, 77, 255, 0.15);
+  background: #ffffff;
+  flex-shrink: 0;
   z-index: 5;
 }
 
-.chat-title {
+.suo-chatbot .chat-title {
   font-size: 22px;
-  font-weight: 500;
-  color: #ffffff;
+  font-weight: 600;
+  color: #2b1b5a;
   margin: 0;
 }
 
@@ -33,7 +34,7 @@
    CHAT WINDOW (Middle Scrollable Section)
    ========================================================================== */
 
-.chat-view-container {
+.suo-chatbot .chat-view-container {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -42,7 +43,7 @@
   min-height: 0; /* Flexbox scroll fix */
 }
 
-.scrollable-chat-window {
+.suo-chatbot .scrollable-chat-window {
   flex: 1;
   overflow-y: auto;
   padding: 30px 40px 120px 40px; /* 120px bottom padding taaki input bar text na chhupaye */
@@ -53,14 +54,14 @@
 }
 
 /* Custom Scrollbar for Chat Window */
-.scrollable-chat-window::-webkit-scrollbar {
+.suo-chatbot .scrollable-chat-window::-webkit-scrollbar {
   width: 6px;
 }
-.scrollable-chat-window::-webkit-scrollbar-thumb {
-  background: #788b3c;
+.suo-chatbot .scrollable-chat-window::-webkit-scrollbar-thumb {
+  background: var(--ncc-primary, hsl(262, 83%, 58%));
   border-radius: 10px;
 }
-.scrollable-chat-window::-webkit-scrollbar-track {
+.suo-chatbot .scrollable-chat-window::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -68,15 +69,15 @@
    MESSAGE BUBBLES (Smooth Animation)
    ========================================================================== */
 
-.message-wrapper {
+.suo-chatbot .message-wrapper {
   display: flex;
   width: 100%;
 }
 
-.bot-align { justify-content: flex-start; }
-.user-align { justify-content: flex-end; }
+.suo-chatbot .bot-align { justify-content: flex-start; }
+.suo-chatbot .user-align { justify-content: flex-end; }
 
-.message-bubble {
+.suo-chatbot .message-bubble {
   padding: 15px 25px;
   border-radius: 12px;
   max-width: 70%;
@@ -92,20 +93,21 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.bot-style {
-  background: #1a273a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.suo-chatbot .bot-style {
+  background: #ffffff;
+  border: 1px solid rgba(124, 77, 255, 0.15);
   border-bottom-left-radius: 2px;
-  color: #ffffff;
+  color: #2b1b5a;
+  box-shadow: 0 12px 24px rgba(124, 77, 255, 0.12);
 }
 
-.user-style {
-  background: #3d4fad;
+.suo-chatbot .user-style {
+  background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
   border-bottom-right-radius: 2px;
-  color: #ffffff;
+  color: white;
 }
 
-.time-label {
+.suo-chatbot .time-label {
   font-size: 0.7rem;
   opacity: 0.5;
   margin-top: 5px;
@@ -117,20 +119,20 @@
    FIXED SEARCH BAR (Bottom of Chat Container)
    ========================================================================== */
 
-.fixed-input-section {
+.suo-chatbot .fixed-input-section {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
   padding: 20px 40px 30px 40px;
-  background: linear-gradient(to top, #0d1726 80%, transparent);
+  background: #ffffff;
   z-index: 10;
 }
 
-.chat-input-wrapper {
+.suo-chatbot .chat-input-wrapper {
   display: flex;
-  background: #1a273a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #ffffff;
+  border: 1px solid rgba(124, 77, 255, 0.15);
   border-radius: 12px;
   padding: 10px 15px;
   align-items: center;
@@ -138,29 +140,31 @@
   transition: border-color 0.3s ease;
 }
 
-.chat-input-wrapper:focus-within {
-  border-color: #788b3c;
+.suo-chatbot .chat-input-wrapper:focus-within {
+  border-color: #7c4dff;
+  box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.18);
 }
 
-.chat-input-wrapper input {
+.suo-chatbot .chat-input-wrapper input {
   flex: 1;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: #2b1b5a;
   font-size: 16px;
   outline: none;
 }
 
-.chat-input-wrapper input::placeholder {
-  color: #8fa3bf;
+.suo-chatbot .chat-input-wrapper input::placeholder {
+  color: rgba(43, 27, 90, 0.5);
 }
 
-.send-btn {
-  background: #788b3c;
+.suo-chatbot .send-btn {
+  background: linear-gradient(135deg, #7c4dff, #f472b6);
   border: none;
   color: white;
-  width: 40px;
+  min-width: 88px;
   height: 40px;
+  padding: 0 16px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -168,30 +172,35 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.send-btn:hover:not(:disabled) {
-  filter: brightness(1.2);
+.suo-chatbot .send-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
   transform: scale(1.05);
 }
 
-.send-btn:disabled {
-  background: #2a3544;
+.suo-chatbot .send-btn:disabled {
+  background: var(--ncc-gradient, linear-gradient(135deg, hsl(262, 83%, 58%), hsl(280, 100%, 70%)));
+  color: white;
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 /* Thinking Indicator / Dot Pulse */
-.thinking-bubble {
+.suo-chatbot .thinking-bubble {
   padding: 15px 25px;
   width: fit-content;
 }
 
-.dot-pulse {
+.suo-chatbot .dot-pulse {
   width: 6px;
   height: 6px;
   border-radius: 5px;
-  background-color: #788b3c;
+  background-color: var(--ncc-primary, hsl(262, 83%, 58%));
   animation: pulse 1.5s infinite ease-in-out;
 }
 
@@ -205,18 +214,18 @@
    ========================================================================== */
 
 @media (max-width: 768px) {
-  .fixed-top-bar { padding: 15px 20px; }
+  .suo-chatbot .fixed-top-bar { padding: 15px 20px; }
   
-  .scrollable-chat-window {
+  .suo-chatbot .scrollable-chat-window {
     padding: 15px 20px 100px 20px;
   }
   
-  .message-bubble {
+  .suo-chatbot .message-bubble {
     max-width: 90%;
     font-size: 14px;
   }
 
-  .fixed-input-section {
+  .suo-chatbot .fixed-input-section {
     padding: 10px 15px 20px 15px;
   }
 }

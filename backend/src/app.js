@@ -52,6 +52,12 @@ app.use("/api/ano", anoRoutes);
 app.use("/api/cadet", cadetRoutes);
 app.use("/api/chat", chatRoutes);
 
+// Chat System (Existing)
+app.use("/api/chat", chatRoutes);
+
+// ------------------------------------------
+// 3. Global Error Handler
+// ------------------------------------------
 app.use((err, req, res, next) => {
   console.error("Global Error:", err.stack);
   res.status(500).json({
@@ -61,6 +67,10 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`   👉 Auth: /api/auth`);
+  console.log(`   👉 ANO:  /api/ano`);
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log("Auth: /api/auth");

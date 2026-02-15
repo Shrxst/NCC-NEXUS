@@ -70,11 +70,11 @@ export default function AlumniDashboard() {
 
   return (
     <>
-      {showReset && (
-        <ResetPasswordModal onClose={() => setShowReset(false)} />
-      )}
-
-      <div className="alumni-dashboard layout">
+      <div className="alumni-dashboard">
+        {showReset && (
+          <ResetPasswordModal onClose={() => setShowReset(false)} />
+        )}
+        <div className="layout">
         {/* ================= SIDEBAR ================= */}
         {isAlumniSidebarOpen ? (
           <button
@@ -85,7 +85,7 @@ export default function AlumniDashboard() {
           />
         ) : null}
 
-        <aside className={`sidebar${isAlumniSidebarOpen ? " open" : ""}`}>
+        <aside className={`sidebar ${isAlumniSidebarOpen ? "open" : "closed"}`}>
           <div>
             <div className="sidebar-header">
               <img src={logoImage} className="sidebar-logo" alt="NCC Logo" />
@@ -160,15 +160,15 @@ export default function AlumniDashboard() {
         </aside>
 
         {/* ================= MAIN ================= */}
-        <main className="main">
-          <div className="alumni-topbar">
+        <main className={`main ${isAlumniSidebarOpen ? "sidebar-open" : ""}`}>
+          <div className="cadet-topbar">
             <button
               type="button"
-              className="alumni-sidebar-toggle"
+              className="cadet-sidebar-toggle"
               aria-label="Toggle sidebar"
               onClick={() => dispatch(toggleAlumniSidebar())}
             >
-              ☰
+              Menu
             </button>
           </div>
 
@@ -264,6 +264,7 @@ export default function AlumniDashboard() {
             </>
           )}
         </main>
+        </div>
       </div>
     </>
   );

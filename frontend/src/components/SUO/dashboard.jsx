@@ -71,11 +71,11 @@ export default function SUODashboard() {
 
   return (
     <>
-      {showReset && (
-        <ResetPasswordModal onClose={() => setShowReset(false)} />
-      )}
-
-      <div className="layout">
+      <div className="suo-dashboard">
+        {showReset && (
+          <ResetPasswordModal onClose={() => setShowReset(false)} />
+        )}
+        <div className="layout">
         {/* ================= SIDEBAR ================= */}
         {isSUOSidebarOpen ? (
           <button
@@ -86,7 +86,7 @@ export default function SUODashboard() {
           />
         ) : null}
 
-        <aside className={`sidebar${isSUOSidebarOpen ? " open" : ""}`}>
+        <aside className={`sidebar ${isSUOSidebarOpen ? "open" : "closed"}`}>
           <div>
             <div className="sidebar-header">
               <img src={logoImage} className="sidebar-logo" alt="NCC Logo" />
@@ -126,7 +126,7 @@ export default function SUODashboard() {
                   dispatch(closeSUOSidebar());
                 }}
               >
-                🤖 <span>Assistant</span>
+                <span>Chatbot</span>
               </button>
 
               <button
@@ -171,15 +171,15 @@ export default function SUODashboard() {
         </aside>
 
         {/* ================= MAIN ================= */}
-        <main className="main">
-          <div className="suo-topbar">
+        <main className={`main ${isSUOSidebarOpen ? "sidebar-open" : ""}`}>
+          <div className="cadet-topbar">
             <button
               type="button"
-              className="suo-sidebar-toggle"
+              className="cadet-sidebar-toggle"
               aria-label="Toggle sidebar"
               onClick={() => dispatch(toggleSUOSidebar())}
             >
-              ☰
+              Menu
             </button>
           </div>
           {activeTab === "chat" && (
@@ -276,6 +276,7 @@ export default function SUODashboard() {
             </>
           )}
         </main>
+        </div>
       </div>
     </>
   );

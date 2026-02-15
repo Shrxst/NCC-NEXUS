@@ -591,7 +591,7 @@ export default function Feed({
   }, [posts]);
 
   return (
-    <>
+    <div className="alumni-feed">
       {/* ================= EDIT POST MODAL ================= */}
       {editingPost && (
         <div className="edit-modal-overlay" onClick={() => setEditingPost(null)}>
@@ -934,6 +934,6 @@ export default function Feed({
           </div>
         ))}
       </div>
-    </>
+    </div>
   );
 }

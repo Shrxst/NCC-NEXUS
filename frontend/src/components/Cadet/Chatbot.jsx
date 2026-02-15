@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios'; // Import Axios for API calls
 import './Chatbot.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -24,11 +26,12 @@ const Chatbot = () => {
   const fetchChatHistory = async () => {
     try {
       // Connects to the backend we just built
-      const response = await axios.get('http://localhost:5000/api/chat');
+      const response = await axios.get(`${API_BASE_URL}/api/chat`);
       
       // Transform Backend Data (DB columns) to Frontend Format
       // Backend uses 'message', Frontend uses 'text'
-      const formattedMessages = response.data.map(msg => ({
+      const rows = Array.isArray(response.data) ? response.data : [];
+      const formattedMessages = rows.map(msg => ({
         id: msg.id,
         sender: msg.sender,
         text: msg.message, 
@@ -101,14 +104,18 @@ const Chatbot = () => {
     try {
       // B. Send to Backend
       // Pass 'cadetId' if you have login (e.g., from localStorage)
-      const response = await axios.post('http://localhost:5000/api/chat', {
+      const response = await axios.post(`${API_BASE_URL}/api/chat`, {
         message: text,
         cadetId: 1 // Default ID or fetch from Auth Context
       });
 
       // C. Trigger Streaming with Real AI Response
       // The backend returns: { user: {...}, bot: { message: "..." } }
-      await handleBotResponse(response.data.bot.message);
+      const botMessage =
+        response?.data?.bot?.message ||
+        response?.data?.message ||
+        "Jai Hind Cadet, I am unable to process that request right now.";
+      await handleBotResponse(botMessage);
 
     } catch (error) {
       console.error("Chat API Error:", error);
