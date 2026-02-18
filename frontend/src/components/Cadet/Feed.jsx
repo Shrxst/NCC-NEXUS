@@ -17,6 +17,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import "./feed.css";
+import { connectFeedSocket, getFeedSocket } from "../../features/feed/feedSocket";
 
 /* ===== TIME FORMATTER ===== */
 const formatTime = (timestamp) => {
@@ -140,8 +141,8 @@ const ReplyItem = ({ reply, postId, commentId, profileName, formatTime, toggleRe
 };
 
 export default function Feed({
-  profileImage = "https://i.pravatar.cc/150",
-  profileName = "Shami Dubey",
+  profileImage = "",
+  profileName = "",
   mode = "feed", // "profile" | "feed"
 }) {
   const [text, setText] = useState("");
@@ -149,6 +150,9 @@ export default function Feed({
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [selectedVideoFile, setSelectedVideoFile] = useState(null);
+  const [creatingPost, setCreatingPost] = useState(false);
 
   const [editingPost, setEditingPost] = useState(null);
   const [editText, setEditText] = useState("");
@@ -165,38 +169,94 @@ export default function Feed({
 
   const imageRef = useRef(null);
   const videoRef = useRef(null);
+  const viewedPostIdsRef = useRef(new Set());
+
+  const FEED_API_URL = "http://localhost:5000/api/posts";
 
   /* ================= POSTS STATE ================= */
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      name: "Shami Dubey",
-      role: "CADET",
-      createdAt: Date.now() - 3600000,
-      text: "Honored to represent our unit at the National Integration Camp.",
-      image: null,
-      video: null,
-      likes: 12,
-      liked: false,
-      comments: [],
-      views: 156,
-    },
-    {
-      id: 2,
-      name: "Priya Sharma",
-      role: "CADET",
-      createdAt: Date.now() - 7200000,
-      text: "Proud to be part of NCC 🇮🇳",
-      image: null,
-      video: null,
-      likes: 7,
-      liked: false,
-      comments: [],
-      views: 89,
-    },
-  ]);
+  const [posts, setPosts] = useState([]);
 
-  // Helper function to count total comments including all nested replies
+  const normalizePost = (post = {}) => ({
+    id: Number(post.id ?? post.post_id ?? Date.now()),
+    post_id: Number(post.post_id ?? post.id ?? Date.now()),
+    name: post.name || post.full_name || "Cadet",
+    role: post.role || post.rank_name || "CADET",
+    createdAt: post.createdAt
+      ? Number(post.createdAt)
+      : post.created_at
+      ? new Date(post.created_at).getTime()
+      : Date.now(),
+    text: post.text ?? post.content_text ?? post.caption ?? "",
+    image: post.image || (post.post_type === "image" ? post.media_url : null),
+    video: post.video || (post.post_type === "video" ? post.media_url : null),
+    likes: Number(post.likes ?? post.likes_count ?? 0),
+    likes_count: Number(post.likes_count ?? post.likes ?? 0),
+    liked: Boolean(post.liked),
+    comments: Array.isArray(post.comments) ? post.comments : [],
+    comments_count: Number(
+      post.comments_count ?? (Array.isArray(post.comments) ? post.comments.length : 0)
+    ),
+    views: Number(post.views ?? post.views_count ?? 0),
+    avatar: post.avatar || post.profile_image_url || null,
+  });
+
+  const getPostLikeCount = (post) => Number(post.likes ?? post.likes_count ?? 0);
+
+  const getPostCommentCount = (post) => {
+    if (Array.isArray(post.comments) && post.comments.length > 0) {
+      return getTotalCommentCount(post.comments);
+    }
+    return Number(post.comments_count ?? 0);
+  };
+
+  const mapServerComment = (comment) => ({
+    id: Number(comment.comment_id ?? comment.id ?? Date.now()),
+    user: comment.full_name || comment.user || "Cadet",
+    text: comment.content || comment.text || "",
+    createdAt: comment.created_at ? new Date(comment.created_at).getTime() : Date.now(),
+    likes: 0,
+    liked: false,
+    replies: [],
+  });
+
+  const fetchCommentsForPost = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return [];
+
+    const response = await fetch(`${FEED_API_URL}/${postId}/comments`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load comments");
+    }
+
+    return Array.isArray(data) ? data.map(mapServerComment) : [];
+  };
+
+  const openComments = async (post) => {
+    setCommentPost(post);
+
+    try {
+      const comments = await fetchCommentsForPost(post.id);
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(post.id)
+            ? {
+                ...p,
+                comments,
+                comments_count: comments.length,
+              }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Load Comments Error:", error);
+    }
+  };  // Helper function to count total comments including all nested replies
   const getTotalCommentCount = (comments) => {
     const countReplies = (replies) => {
       if (!replies || replies.length === 0) return 0;
@@ -289,44 +349,126 @@ export default function Feed({
       : posts.filter((p) => p.name !== profileName);
 
   /* ================= CREATE POST (PROFILE ONLY) ================= */
-  const createPost = () => {
-    if (!text && !selectedImage && !selectedVideo) return;
+  const createPost = async () => {
+    if (!text.trim() && !selectedImageFile && !selectedVideoFile) return;
 
-    setPosts([
-      {
-        id: Date.now(),
-        name: profileName,
-        role: "CADET",
-        createdAt: Date.now(),
-        text,
-        image: selectedImage,
-        video: selectedVideo,
-        likes: 0,
-        liked: false,
-        comments: [],
-        views: 0,
-      },
-      ...posts,
-    ]);
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
 
-    setText("");
-    setSelectedImage(null);
-    setSelectedVideo(null);
+    const formData = new FormData();
+    formData.append("content_text", text.trim());
+
+    const mediaFile = selectedImageFile || selectedVideoFile;
+    if (mediaFile) {
+      formData.append("media", mediaFile);
+    }
+
+    try {
+      setCreatingPost(true);
+
+      const response = await fetch(FEED_API_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Failed to create post: ${data.message || "Unknown error"}`);
+        return;
+      }
+
+      const createdPost = normalizePost({ ...data, name: profileName, role: "CADET" });
+      setPosts((prev) => [createdPost, ...prev.filter((item) => Number(item.id) !== Number(createdPost.id))]);
+
+      setText("");
+      setSelectedImage(null);
+      setSelectedVideo(null);
+      setSelectedImageFile(null);
+      setSelectedVideoFile(null);
+    } catch (error) {
+      console.error("Create Post Error:", error);
+      alert("Unable to create post.");
+    } finally {
+      setCreatingPost(false);
+    }
   };
 
   /* ================= LIKE POST ================= */
-  const toggleLike = (id) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === id
+  const toggleLike = async (id) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    const currentPost = posts.find((p) => Number(p.id) === Number(id));
+    if (!currentPost) return;
+
+    const wasLiked = Boolean(currentPost.liked);
+    const previousLikes = Number(currentPost.likes ?? currentPost.likes_count ?? 0);
+
+    setPosts((prev) =>
+      prev.map((p) =>
+        Number(p.id) === Number(id)
           ? {
               ...p,
               liked: !p.liked,
-              likes: p.liked ? p.likes - 1 : p.likes + 1,
+              likes: p.liked ? Math.max((p.likes || 0) - 1, 0) : (p.likes || 0) + 1,
             }
           : p
       )
     );
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${id}/like`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update like");
+      }
+
+      const isLikedNow = data.message === "Liked" ? true : data.message === "Unliked" ? false : !wasLiked;
+      const nextLikes = Number(data.likes_count ?? previousLikes + (isLikedNow ? 1 : -1));
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(id)
+            ? {
+                ...p,
+                liked: isLikedNow,
+                likes: Math.max(nextLikes, 0),
+                likes_count: Math.max(nextLikes, 0),
+              }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Toggle Like Error:", error);
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(id)
+            ? {
+                ...p,
+                liked: wasLiked,
+                likes: previousLikes,
+                likes_count: previousLikes,
+              }
+            : p
+        )
+      );
+      alert("Failed to update like.");
+    }
   };
 
   /* ================= DELETE POST ================= */
@@ -352,32 +494,58 @@ export default function Feed({
   };
 
   /* ================= COMMENTS ================= */
-  const addComment = () => {
-    if (!commentText.trim()) return;
+  const addComment = async () => {
+    const content = commentText.trim();
+    if (!content || !commentPost?.id) return;
 
-    setPosts(
-      posts.map((p) =>
-        p.id === commentPost.id
-          ? {
-              ...p,
-              comments: [
-                ...p.comments,
-                {
-                  id: Date.now(),
-                  user: profileName,
-                  text: commentText,
-                  createdAt: Date.now(),
-                  likes: 0,
-                  liked: false,
-                  replies: [],
-                },
-              ],
-            }
-          : p
-      )
-    );
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
 
-    setCommentText("");
+    try {
+      const response = await fetch(`${FEED_API_URL}/${commentPost.id}/comment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to add comment");
+      }
+
+      const createdComment = {
+        id: Number(data.comment_id ?? Date.now()),
+        user: profileName || "You",
+        text: data.content || content,
+        createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
+        likes: 0,
+        liked: false,
+        replies: [],
+      };
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(commentPost.id)
+            ? {
+                ...p,
+                comments: [...(p.comments || []), createdComment],
+                comments_count: Number(p.comments_count ?? 0) + 1,
+              }
+            : p
+        )
+      );
+
+      setCommentText("");
+    } catch (error) {
+      console.error("Add Comment Error:", error);
+      alert("Failed to add comment.");
+    }
   };
 
   const toggleCommentLike = (postId, commentId) => {
@@ -579,6 +747,121 @@ export default function Feed({
     );
   };
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const fetchFeed = async () => {
+      try {
+        const response = await fetch(FEED_API_URL, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+        if (!response.ok) return;
+
+        const list = Array.isArray(data) ? data.map((item) => normalizePost(item)) : [];
+        setPosts(list);
+      } catch (error) {
+        console.error("Fetch Feed Error:", error);
+      }
+    };
+
+    fetchFeed();
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const socket = connectFeedSocket(token) || getFeedSocket();
+    if (!socket) return;
+
+    const handleNewPost = (incomingPost) => {
+      if (!incomingPost) return;
+
+      const normalized = normalizePost(incomingPost);
+      setPosts((prev) => [normalized, ...prev.filter((item) => Number(item.id) !== Number(normalized.id))]);
+    };
+
+    const handleDeletePost = ({ post_id }) => {
+      setPosts((prev) => prev.filter((item) => Number(item.id) !== Number(post_id)));
+    };
+
+    const handleLikeUpdate = ({ post_id, likes_count }) => {
+      setPosts((prev) =>
+        prev.map((item) =>
+          Number(item.id) === Number(post_id)
+            ? { ...item, likes: Number(likes_count), likes_count: Number(likes_count) }
+            : item
+        )
+      );
+    };
+
+    const handleCommentUpdate = ({ post_id, comments_count }) => {
+      setPosts((prev) =>
+        prev.map((item) =>
+          Number(item.id) === Number(post_id)
+            ? { ...item, comments_count: Number(comments_count) }
+            : item
+        )
+      );
+    };
+
+    socket.on("feed:new_post", handleNewPost);
+    socket.on("feed:delete_post", handleDeletePost);
+    socket.on("feed:like_update", handleLikeUpdate);
+    socket.on("feed:comment_update", handleCommentUpdate);
+
+    return () => {
+      socket.off("feed:new_post", handleNewPost);
+      socket.off("feed:delete_post", handleDeletePost);
+      socket.off("feed:like_update", handleLikeUpdate);
+      socket.off("feed:comment_update", handleCommentUpdate);
+    };
+  }, []);
+
+  const incrementPostView = async (postId) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${postId}/view`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) return;
+
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(postId)
+            ? {
+                ...p,
+                views: Number(data.views_count ?? (p.views || 0) + 1),
+              }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error("Increment View Error:", error);
+    }
+  };
+
+  useEffect(() => {
+    posts.forEach((post) => {
+      if (!post?.id) return;
+      if (viewedPostIdsRef.current.has(post.id)) return;
+
+      viewedPostIdsRef.current.add(post.id);
+      incrementPostView(post.id);
+    });
+  }, [posts]);
   // Update commentPost when posts change to keep modal in sync
   useEffect(() => {
     if (commentPost) {
@@ -840,8 +1123,8 @@ export default function Feed({
                 </button>
               </div>
 
-              <button className="feed-post-btn" onClick={createPost}>
-                Post <Send size={16} />
+              <button className="feed-post-btn" onClick={createPost} disabled={creatingPost}>
+                {creatingPost ? "Posting..." : "Post"} <Send size={16} />
               </button>
             </div>
 
@@ -850,20 +1133,28 @@ export default function Feed({
               type="file"
               accept="image/*"
               hidden
-              onChange={(e) =>
-                e.target.files[0] &&
-                setSelectedImage(URL.createObjectURL(e.target.files[0]))
-              }
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSelectedImage(URL.createObjectURL(file));
+                setSelectedImageFile(file);
+                setSelectedVideo(null);
+                setSelectedVideoFile(null);
+              }}
             />
             <input
               ref={videoRef}
               type="file"
               accept="video/*"
               hidden
-              onChange={(e) =>
-                e.target.files[0] &&
-                setSelectedVideo(URL.createObjectURL(e.target.files[0]))
-              }
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSelectedVideo(URL.createObjectURL(file));
+                setSelectedVideoFile(file);
+                setSelectedImage(null);
+                setSelectedImageFile(null);
+              }}
             />
           </div>
         )}
@@ -873,7 +1164,7 @@ export default function Feed({
           <div className="feed-card" key={p.id}>
             <div className="feed-card-header">
               <div className="feed-user">
-                <img src={profileImage} className="feed-avatar" />
+                <img src={p.avatar || profileImage} className="feed-avatar" />
                 <div>
                   <h3>
                     {p.name} <span className="feed-role">{p.role}</span>
@@ -901,6 +1192,16 @@ export default function Feed({
 
             <p className="feed-text">{formatTextWithMentions(p.text)}</p>
 
+            {p.image ? (
+              <img src={p.image} className="feed-media-image" alt="Post media" />
+            ) : null}
+
+            {p.video ? (
+              <video className="feed-media-video" controls preload="metadata">
+                <source src={p.video} />
+              </video>
+            ) : null}
+
             {/* Post Statistics */}
             <div className="post-stats">
               <span className="stat-item">
@@ -916,18 +1217,18 @@ export default function Feed({
               >
                 <Heart size={16} fill={p.liked ? "red" : "none"} />
                 <span>Like</span>
-                <span className="feed-action-count">{p.likes}</span>
+                <span className="feed-action-count">{getPostLikeCount(p)}</span>
               </button>
 
               <button
                 type="button"
                 className="feed-action-btn"
-                onClick={() => setCommentPost(p)}
+                onClick={() => openComments(p)}
               >
                 <MessageCircle size={16} />
                 <span>Comment</span>
                 <span className="feed-action-count">
-                  {getTotalCommentCount(p.comments)}
+                  {getPostCommentCount(p)}
                 </span>
               </button>
             </div>
@@ -937,5 +1238,4 @@ export default function Feed({
     </div>
   );
 }
-
 

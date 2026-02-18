@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { FaMedal, FaLock, FaTimes } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
+import { connectChatSocket } from "../../features/ui/socket";
+import { connectFeedSocket } from "../../features/feed/feedSocket";
+import { connectNotificationSocket } from "../../features/notifications/notificationSocket";
 import nccLogo from "../assets/ncc-logo.png";
 
 const LoginPage = ({ isModal = false, onClose }) => {
@@ -38,9 +41,18 @@ const LoginPage = ({ isModal = false, onClose }) => {
         return;
       }
 
-      localStorage.setItem("token", data.token);
+      const token = data.token;
+
+      localStorage.setItem("token", token);
       localStorage.setItem("role", role);
+      localStorage.setItem("system_role", data.user?.role || "");
+      localStorage.setItem("rank", data.user?.rank || "");
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Connect all real-time channels immediately after login.
+      connectChatSocket(token);
+      connectFeedSocket(token);
+      connectNotificationSocket(token);
 
       if (role === "SUO") {
         navigate("/suo-dashboard");

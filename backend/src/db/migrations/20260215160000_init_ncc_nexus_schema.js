@@ -120,26 +120,35 @@ exports.up = async function (knex) {
   // 8. POSTS
   // ======================
   await knex.schema.createTable("posts", (t) => {
-    t.increments("post_id").primary();
+  t.increments("post_id").primary();
 
-    t.string("regimental_no")
-      .notNullable()
-      .references("regimental_no")
-      .inTable("cadet_profiles")
-      .onDelete("CASCADE");
+  t.string("regimental_no")
+    .notNullable()
+    .references("regimental_no")
+    .inTable("cadet_profiles")
+    .onDelete("CASCADE");
 
-    t.enu("post_type", ["text", "image", "video"])
-      .notNullable()
-      .defaultTo("text");
+  t.enu("post_type", ["text", "image", "video"])
+    .notNullable()
+    .defaultTo("text");
 
-    t.text("content_text");
-    t.string("media_url");
+  t.text("caption");
+  t.string("media_url");
+  t.string("media_public_id");
 
-    t.integer("likes_count").defaultTo(0);
-    t.integer("comments_count").defaultTo(0);
+  t.enu("visibility", ["public", "unit", "private"])
+    .defaultTo("unit");
 
-    t.timestamp("created_at").defaultTo(knex.fn.now());
-  });
+  t.integer("likes_count").defaultTo(0);
+  t.integer("comments_count").defaultTo(0);
+
+  t.timestamp("created_at").defaultTo(knex.fn.now());
+  t.timestamp("deleted_at");
+
+  t.index(["regimental_no"]);
+  t.index(["created_at"]);
+  t.integer("views_count").defaultTo(0);
+});
 
   // ======================
   // 9. COMMENTS

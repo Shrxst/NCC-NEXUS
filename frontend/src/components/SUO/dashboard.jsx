@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   User,
   MapPin,
@@ -13,55 +13,161 @@ import ChatLayout from "../ChatCommon/ChatLayout";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import "./dashboard.css";
-import logoImage from "../assets/ncc-logo.png"; // Adjusted path to assets
+import logoImage from "../assets/ncc-logo.png";
 import Feed from "./feed";
 import ResetPasswordModal from "./resetPassword";
 import Chatbot from "./chatbot";
-// Assuming these actions exist in your uiSlice for the SUO role
 import { closeSUOSidebar, toggleSUOSidebar } from "../../features/ui/uiSlice";
 
 export default function SUODashboard() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  
-  // Adjusted selector to use the SUO-specific sidebar state
   const isSUOSidebarOpen = useSelector((state) => state.ui.isSUOSidebarOpen);
 
   const [activeTab, setActiveTab] = useState("profile");
   const [showReset, setShowReset] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const [profileImage, setProfileImage] = useState(
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d" // Updated default placeholder
-  );
+  const defaultProfileImage = "";
+  const [profileImage, setProfileImage] = useState(defaultProfileImage);
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
 
   const [profileData, setProfileData] = useState({
-    name: "Aman Singh",
-    rank: "Senior Under Officer (SUO)",
-    location: "1 PB BN NCC, Ludhiana",
-    bio:
-      "Leading with integrity. Responsible for unit discipline and training coordination.",
+    name: "",
+    rank: "",
+    location: "",
+    bio: "",
   });
 
   const fileInputRef = useRef(null);
 
-  const handleProfileImageChange = (e) => {
+  const fetchProfile = async (token) => {
+    try {
+      setLoadingProfile(true);
+      const response = await fetch("http://localhost:5000/api/cadet/profile", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        return false;
+      }
+
+      if (data.role !== "SUO") {
+        alert("This account is not authorized for SUO dashboard.");
+        navigate("/dashboard");
+        return false;
+      }
+
+      setProfileData({
+        name: data.name || "SUO",
+        rank: data.rank || "Senior Under Officer",
+        location: [data.unit, data.city].filter(Boolean).join(", "),
+        bio: data.bio || "Add your bio using edit button.",
+      });
+
+      setProfileImage(data.profile_image_url || defaultProfileImage);
+      return true;
+    } catch (error) {
+      console.error("Fetch Profile Error:", error);
+      alert("Unable to load profile.");
+      return false;
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const updateProfile = async ({ token, bio, imageFile }) => {
+    const formData = new FormData();
+    formData.append("bio", bio || "");
+
+    if (imageFile) {
+      formData.append("profile_image", imageFile);
+    }
+
+    const response = await fetch("http://localhost:5000/api/cadet/profile", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Unknown error");
+    }
+  };
+
+  const handleProfileImageChange = async (e) => {
     const file = e.target.files[0];
-    if (file) setProfileImage(URL.createObjectURL(file));
+    if (!file) {
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      navigate("/");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setProfileImage(previewUrl);
+    setSelectedImageFile(file);
+
+    try {
+      await updateProfile({
+        token,
+        bio: profileData.bio || "",
+        imageFile: file,
+      });
+      setSelectedImageFile(null);
+      await fetchProfile(token);
+    } catch (error) {
+      console.error("Image Upload Error:", error);
+      alert(`Image upload failed: ${error.message}`);
+    } finally {
+      URL.revokeObjectURL(previewUrl);
+    }
   };
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
 
   const startEditBio = () => {
-    setTempBio(profileData.bio);
+    setTempBio(profileData.bio || "");
     setIsEditingBio(true);
   };
 
-  const saveBio = () => {
-    if (tempBio.trim()) {
-      setProfileData({ ...profileData, bio: tempBio.trim() });
+  const saveBio = async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      navigate("/");
+      return;
     }
-    setIsEditingBio(false);
+
+    const nextBio = tempBio.trim();
+
+    try {
+      await updateProfile({
+        token,
+        bio: nextBio,
+        imageFile: selectedImageFile,
+      });
+
+      setProfileData((prev) => ({ ...prev, bio: nextBio }));
+      setSelectedImageFile(null);
+      await fetchProfile(token);
+      setIsEditingBio(false);
+    } catch (error) {
+      console.error("Save Bio Error:", error);
+      alert(`Failed to update profile: ${error.message}`);
+    }
   };
 
   const cancelEditBio = () => {
@@ -69,215 +175,217 @@ export default function SUODashboard() {
     setTempBio("");
   };
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+
+    if (!token || role !== "SUO") {
+      navigate("/");
+      return;
+    }
+
+    fetchProfile(token);
+  }, [navigate]);
+
   return (
     <>
       <div className="suo-dashboard">
-        {showReset && (
-          <ResetPasswordModal onClose={() => setShowReset(false)} />
-        )}
+        {showReset && <ResetPasswordModal onClose={() => setShowReset(false)} />}
+
         <div className="layout">
-        {/* ================= SIDEBAR ================= */}
-        {isSUOSidebarOpen ? (
-          <button
-            type="button"
-            className="suo-sidebar-backdrop"
-            aria-label="Close sidebar"
-            onClick={() => dispatch(closeSUOSidebar())}
-          />
-        ) : null}
-
-        <aside className={`sidebar ${isSUOSidebarOpen ? "open" : "closed"}`}>
-          <div>
-            <div className="sidebar-header">
-              <img src={logoImage} className="sidebar-logo" alt="NCC Logo" />
-              <div className="logo-text">
-                <h1>NCC NEXUS</h1>
-                <p>SUO DASHBOARD</p>
-              </div>
-            </div>
-
-            <div className="nav-list">
-              <button
-                className={`nav-item ${activeTab === "profile" ? "active" : ""}`}
-                onClick={() => {
-                  setActiveTab("profile");
-                  dispatch(closeSUOSidebar());
-                }}
-              >
-                <User size={18} />
-                <span>Profile</span>
-              </button>
-
-              <button
-                className={`nav-item ${activeTab === "feed" ? "active" : ""}`}
-                onClick={() => {
-                  setActiveTab("feed");
-                  dispatch(closeSUOSidebar());
-                }}
-              >
-                <MapPin size={18} />
-                <span>Feed</span>
-              </button>
-
-              <button
-                className={`nav-item ${activeTab === "chatbot" ? "active" : ""}`}
-                onClick={() => {
-                  setActiveTab("chatbot");
-                  dispatch(closeSUOSidebar());
-                }}
-              >
-                <span>Chatbot</span>
-              </button>
-
-              <button
-                className={`nav-item ${activeTab === "chat" ? "active" : ""}`}
-                onClick={() => {
-                  setActiveTab("chat");
-                  if (!isSUOSidebarOpen) dispatch(toggleSUOSidebar());
-                }}
-              >
-                <MessageSquare size={18} />
-                <span>Chat</span>
-              </button>
-
-              <button className="nav-item">
-                <ImageIcon size={18} />
-                <span>Management</span>
-              </button>
-
-              <button
-                className="nav-item"
-                onClick={() => {
-                  setShowReset(true);
-                  dispatch(closeSUOSidebar());
-                }}
-              >
-                <KeyRound size={18} />
-                <span>Reset Password</span>
-              </button>
-            </div>
-          </div>
-
-          <button
-            className="logout-item"
-            onClick={() => {
-              dispatch(closeSUOSidebar());
-              navigate("/");
-            }}
-          >
-            <LogOut size={18} />
-            <span>Logout</span>
-          </button>
-        </aside>
-
-        {/* ================= MAIN ================= */}
-        <main className={`main ${isSUOSidebarOpen ? "sidebar-open" : ""}`}>
-          <div className="cadet-topbar">
+          {isSUOSidebarOpen ? (
             <button
               type="button"
-              className="cadet-sidebar-toggle"
-              aria-label="Toggle sidebar"
-              onClick={() => dispatch(toggleSUOSidebar())}
-            >
-              Menu
-            </button>
-          </div>
-          {activeTab === "chat" && (
-            <div className="chat-panel">
-              <ChatLayout userRole="suo" />
-            </div>
-          )}
-
-          {activeTab === "chatbot" && <Chatbot />}
-
-          {activeTab === "feed" && (
-            <Feed
-              profileImage={profileImage}
-              profileName={profileData.name}
-              mode="feed"
+              className="suo-sidebar-backdrop"
+              aria-label="Close sidebar"
+              onClick={() => dispatch(closeSUOSidebar())}
             />
-          )}
+          ) : null}
 
-          {activeTab === "profile" && (
-            <>
-              <div className="banner">
-                <div className="profile-photo-wrapper">
-                  <img src={profileImage} className="profile-photo" alt="SUO Profile" />
-                  <button
-                    className="camera-icon"
-                    onClick={() => fileInputRef.current.click()}
-                  >
-                    <Camera size={16} />
-                  </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    hidden
-                    onChange={handleProfileImageChange}
-                  />
+          <aside className={`sidebar ${isSUOSidebarOpen ? "open" : "closed"}`}>
+            <div>
+              <div className="sidebar-header">
+                <img src={logoImage} className="sidebar-logo" alt="NCC Logo" />
+                <div className="logo-text">
+                  <h1>NCC NEXUS</h1>
+                  <p>SUO DASHBOARD</p>
                 </div>
               </div>
 
-              <div className="profile-details">
-                <h1 className="profile-name">{profileData.name}</h1>
+              <div className="nav-list">
+                <button
+                  className={`nav-item ${activeTab === "profile" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("profile");
+                    dispatch(closeSUOSidebar());
+                  }}
+                >
+                  <User size={18} />
+                  <span>Profile</span>
+                </button>
 
-                <div className="profile-info">
-                  <div className="info-pill">
-                    <User size={16} />
-                    {profileData.rank}
-                  </div>
-                  <div className="info-pill">
-                    <MapPin size={16} />
-                    {profileData.location}
+                <button
+                  className={`nav-item ${activeTab === "feed" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("feed");
+                    dispatch(closeSUOSidebar());
+                  }}
+                >
+                  <MapPin size={18} />
+                  <span>Feed</span>
+                </button>
+
+                <button
+                  className={`nav-item ${activeTab === "chatbot" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("chatbot");
+                    dispatch(closeSUOSidebar());
+                  }}
+                >
+                  <span>Chatbot</span>
+                </button>
+
+                <button
+                  className={`nav-item ${activeTab === "chat" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("chat");
+                    if (!isSUOSidebarOpen) dispatch(toggleSUOSidebar());
+                  }}
+                >
+                  <MessageSquare size={18} />
+                  <span>Chat</span>
+                </button>
+
+                <button className="nav-item">
+                  <ImageIcon size={18} />
+                  <span>Management</span>
+                </button>
+
+                <button
+                  className="nav-item"
+                  onClick={() => {
+                    setShowReset(true);
+                    dispatch(closeSUOSidebar());
+                  }}
+                >
+                  <KeyRound size={18} />
+                  <span>Reset Password</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              className="logout-item"
+              onClick={() => {
+                dispatch(closeSUOSidebar());
+                localStorage.removeItem("token");
+                localStorage.removeItem("role");
+                localStorage.removeItem("system_role");
+                localStorage.removeItem("rank");
+                localStorage.removeItem("user");
+                navigate("/");
+              }}
+            >
+              <LogOut size={18} />
+              <span>Logout</span>
+            </button>
+          </aside>
+
+          <main className={`main ${isSUOSidebarOpen ? "sidebar-open" : ""}`}>
+            <div className="cadet-topbar">
+              <button
+                type="button"
+                className="cadet-sidebar-toggle"
+                aria-label="Toggle sidebar"
+                onClick={() => dispatch(toggleSUOSidebar())}
+              >
+                Menu
+              </button>
+            </div>
+
+            {activeTab === "chat" && (
+              <div className="chat-panel">
+                <ChatLayout userRole="suo" />
+              </div>
+            )}
+
+            {activeTab === "chatbot" && <Chatbot />}
+
+            {activeTab === "feed" && (
+              <Feed profileImage={profileImage} profileName={profileData.name} mode="feed" />
+            )}
+
+            {activeTab === "profile" && (
+              <>
+                {loadingProfile ? <p className="section-title">Loading profile...</p> : null}
+
+                <div className="banner">
+                  <div className="profile-photo-wrapper">
+                    <img src={profileImage || logoImage} className="profile-photo" alt="SUO Profile" />
+                    <button className="camera-icon" onClick={() => fileInputRef.current.click()}>
+                      <Camera size={16} />
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      hidden
+                      accept="image/*"
+                      onChange={handleProfileImageChange}
+                    />
                   </div>
                 </div>
 
-                <div className="bio-container">
-                  {isEditingBio ? (
-                    <div className="bio-edit-mode">
-                      <textarea
-                        className="bio-edit-textarea"
-                        value={tempBio}
-                        onChange={(e) => setTempBio(e.target.value)}
-                      />
-                      <div className="bio-edit-actions">
-                        <button className="bio-save-btn" onClick={saveBio}>
-                          Save
-                        </button>
-                        <button
-                          className="bio-cancel-btn"
-                          onClick={cancelEditBio}
-                        >
-                          Cancel
+                <div className="profile-details">
+                  <h1 className="profile-name">{profileData.name}</h1>
+
+                  <div className="profile-info">
+                    <div className="info-pill">
+                      <User size={16} />
+                      {profileData.rank}
+                    </div>
+                    <div className="info-pill">
+                      <MapPin size={16} />
+                      {profileData.location}
+                    </div>
+                  </div>
+
+                  <div className="bio-container">
+                    {isEditingBio ? (
+                      <div className="bio-edit-mode">
+                        <textarea
+                          className="bio-edit-textarea"
+                          value={tempBio}
+                          onChange={(e) => setTempBio(e.target.value)}
+                        />
+                        <div className="bio-edit-actions">
+                          <button className="bio-save-btn" onClick={saveBio}>
+                            Save
+                          </button>
+                          <button className="bio-cancel-btn" onClick={cancelEditBio}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bio-display">
+                        <p className="bio">"{profileData.bio || "Add your bio using edit button."}"</p>
+                        <button className="bio-edit-icon" onClick={startEditBio}>
+                          <Edit2 size={16} />
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="bio-display">
-                      <p className="bio">"{profileData.bio}"</p>
-                      <button
-                        className="bio-edit-icon"
-                        onClick={startEditBio}
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <h2 className="section-title">SUO Activity Log</h2>
+                <h2 className="section-title">SUO Activity Log</h2>
 
-              <Feed
-                profileImage={profileImage}
-                profileName={profileData.name}
-                mode="profile"
-              />
-            </>
-          )}
-        </main>
+                <Feed profileImage={profileImage} profileName={profileData.name} mode="profile" />
+              </>
+            )}
+          </main>
         </div>
       </div>
     </>
   );
 }
+

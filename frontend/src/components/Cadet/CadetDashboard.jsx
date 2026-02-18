@@ -28,8 +28,9 @@ export default function CadetDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const defaultProfileImage = "https://images.unsplash.com/photo-1607746882042-944635dfe10e";
+  const defaultProfileImage = "";
   const [profileImage, setProfileImage] = useState(defaultProfileImage);
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
 
   const [profileData, setProfileData] = useState({
     name: "",
@@ -40,11 +41,91 @@ export default function CadetDashboard() {
 
   const fileInputRef = useRef(null);
 
-  const handleProfileImageChange = (e) => {
+  const fetchProfile = async (token) => {
+    try {
+      setLoadingProfile(true);
+      const response = await fetch("http://localhost:5000/api/cadet/profile", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        return false;
+      }
+
+      setProfileData({
+        name: data.name || "Cadet",
+        rank: data.rank || "Cadet",
+        location: [data.unit, data.city].filter(Boolean).join(", "),
+        bio: data.bio || "Add your bio using edit button.",
+      });
+
+      setProfileImage(data.profile_image_url || defaultProfileImage);
+      return true;
+    } catch (error) {
+      console.error("Fetch Profile Error:", error);
+      alert("Unable to load profile.");
+      return false;
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const updateProfile = async ({ token, bio, imageFile }) => {
+    const formData = new FormData();
+    formData.append("bio", bio || "");
+
+    if (imageFile) {
+      formData.append("profile_image", imageFile);
+    }
+
+    const response = await fetch("http://localhost:5000/api/cadet/profile", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || "Unknown error");
+    }
+  };
+
+  const handleProfileImageChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Local preview only; upload endpoint is not implemented yet.
-      setProfileImage(URL.createObjectURL(file));
+    if (!file) {
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      navigate("/");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setProfileImage(previewUrl);
+    setSelectedImageFile(file);
+
+    try {
+      await updateProfile({
+        token,
+        bio: profileData.bio || "",
+        imageFile: file,
+      });
+      setSelectedImageFile(null);
+      await fetchProfile(token);
+    } catch (error) {
+      console.error("Image Upload Error:", error);
+      alert(`Image upload failed: ${error.message}`);
+    } finally {
+      URL.revokeObjectURL(previewUrl);
     }
   };
 
@@ -67,34 +148,20 @@ export default function CadetDashboard() {
     const nextBio = tempBio.trim();
 
     try {
-      const response = await fetch("http://localhost:5000/api/cadet/profile", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          bio: nextBio,
-          profile_image_url: profileImage.startsWith("blob:") ? null : profileImage,
-        }),
+      await updateProfile({
+        token,
+        bio: nextBio,
+        imageFile: selectedImageFile,
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        alert(`Profile update failed: ${data.message || "Unknown error"}`);
-        return;
-      }
-
       setProfileData((prev) => ({ ...prev, bio: nextBio }));
-      if (profileImage.startsWith("blob:")) {
-        alert("Bio updated. Image preview is local only until upload API is added.");
-      }
+      setSelectedImageFile(null);
+      await fetchProfile(token);
+      setIsEditingBio(false);
     } catch (error) {
       console.error("Save Bio Error:", error);
-      alert("Failed to update profile.");
+      alert(`Failed to update profile: ${error.message}`);
     }
-
-    setIsEditingBio(false);
   };
 
   const cancelEditBio = () => {
@@ -111,38 +178,7 @@ export default function CadetDashboard() {
       return;
     }
 
-    const fetchProfile = async () => {
-      try {
-        setLoadingProfile(true);
-        const response = await fetch("http://localhost:5000/api/cadet/profile", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-          alert(`Failed to load profile: ${data.message || "Unknown error"}`);
-          return;
-        }
-
-        setProfileData({
-          name: data.name || "Cadet",
-          rank: data.rank || "Cadet",
-          location: [data.unit, data.city].filter(Boolean).join(", "),
-          bio: data.bio || "Add your bio using edit button.",
-        });
-
-        setProfileImage(data.profile_image_url || defaultProfileImage);
-      } catch (error) {
-        console.error("Fetch Profile Error:", error);
-        alert("Unable to load profile.");
-      } finally {
-        setLoadingProfile(false);
-      }
-    };
-
-    fetchProfile();
+    fetchProfile(token);
   }, [navigate]);
 
   return (
@@ -194,7 +230,7 @@ export default function CadetDashboard() {
                   setSidebarOpen(false);
                 }}
               >
-                🤖 <span>Chatbot</span>
+                <span>Chatbot</span>
               </button>
 
               <button
@@ -258,7 +294,7 @@ export default function CadetDashboard() {
               aria-label="Toggle sidebar"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              ☰
+              Menu
             </button>
           </div>
 
@@ -285,7 +321,7 @@ export default function CadetDashboard() {
               ) : null}
               <div className="banner">
                 <div className="profile-photo-wrapper">
-                  <img src={profileImage} className="profile-photo" alt="Cadet profile" />
+                  <img src={profileImage || logoImage} className="profile-photo" alt="Cadet profile" />
                   <button
                     className="camera-icon"
                     onClick={() => fileInputRef.current.click()}
@@ -296,6 +332,7 @@ export default function CadetDashboard() {
                     type="file"
                     ref={fileInputRef}
                     hidden
+                    accept="image/*"
                     onChange={handleProfileImageChange}
                   />
                 </div>
@@ -364,6 +401,4 @@ export default function CadetDashboard() {
     </>
   );
 }
-
-
 

@@ -1,4 +1,5 @@
 const db = require("../db/knex");
+const { uploadToCloudinary } = require("../services/cloudinary.service");
 
 const getProfile = async (req, res) => {
   try {
@@ -50,12 +51,17 @@ const getProfile = async (req, res) => {
     if (!cadet)
       return res.status(404).json({ message: "Cadet not found" });
 
+    let displayRole = "Cadet";
+
+    if (cadet.rank_name === "Senior Under Officer") {
+      displayRole = "SUO";
+    }
+
     return res.json({
       ...cadet,
-      role: "Cadet",
+      role: displayRole,
       rank: cadet.rank_name,
     });
-
   } catch (err) {
     console.error("Get Profile Error:", err);
     res.status(500).json({ message: "Server Error" });
@@ -65,26 +71,40 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { regimental_no, role } = req.user;
-    const { bio, profile_image_url } = req.body;
+    const { bio } = req.body;
 
     if (role === "ALUMNI") {
       return res.status(400).json({
-        message: "Alumni profile editing not supported yet"
+        message: "Alumni profile editing not supported yet",
       });
     }
 
-    await db("cadet_profiles")
-      .where({ regimental_no })
-      .update({
-        bio,
-        profile_image_url,
-      });
+    let imageUrl;
 
-    res.json({ message: "Profile updated successfully" });
+    if (req.file) {
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "ncc-nexus/profile-images"
+      );
+      imageUrl = result.secure_url;
+    }
 
+    const updateData = {
+      ...(bio !== undefined && { bio }),
+      ...(imageUrl && { profile_image_url: imageUrl }),
+    };
+
+    await db("cadet_profiles").where({ regimental_no }).update(updateData);
+
+    res.json({
+      message: "Profile updated successfully",
+      profile_image_url: imageUrl,
+    });
   } catch (err) {
     console.error("Update Profile Error:", err);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({
+      message: err.message || "Server Error",
+    });
   }
 };
 
@@ -95,15 +115,10 @@ const getRankHistory = async (req, res) => {
     const history = await db("cadet_rank_history as h")
       .join("cadet_ranks as r", "h.rank_id", "r.id")
       .where("h.regimental_no", regimental_no)
-      .select(
-        "r.rank_name",
-        "h.start_date",
-        "h.end_date"
-      )
+      .select("r.rank_name", "h.start_date", "h.end_date")
       .orderBy("h.start_date", "desc");
 
     res.json(history);
-
   } catch (err) {
     console.error("Rank History Error:", err);
     res.status(500).json({ message: "Server Error" });

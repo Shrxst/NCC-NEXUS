@@ -107,11 +107,27 @@ exports.up = async function up(knex) {
 };
 
 exports.down = async function down(knex) {
+
+  // Drop triggers
   await knex.raw("DROP TRIGGER IF EXISTS trg_message_read_status_updated_at ON message_read_status");
   await knex.raw("DROP TRIGGER IF EXISTS trg_messages_updated_at ON messages");
   await knex.raw("DROP TRIGGER IF EXISTS trg_chat_participants_updated_at ON chat_participants");
   await knex.raw("DROP TRIGGER IF EXISTS trg_chat_rooms_updated_at ON chat_rooms");
   await knex.raw("DROP FUNCTION IF EXISTS set_updated_at");
+
+  // 🔥 DROP FOREIGN KEYS FIRST (break circular dependency)
+
+  await knex.raw(`
+    ALTER TABLE chat_rooms
+    DROP CONSTRAINT IF EXISTS chat_rooms_last_message_id_foreign;
+  `);
+
+  await knex.raw(`
+    ALTER TABLE chat_participants
+    DROP CONSTRAINT IF EXISTS chat_participants_last_read_message_id_foreign;
+  `);
+
+  // Now safe to drop tables in dependency order
 
   await knex.schema.dropTableIfExists("message_read_status");
   await knex.schema.dropTableIfExists("messages");
