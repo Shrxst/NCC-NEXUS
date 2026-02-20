@@ -320,36 +320,10 @@ export default function SUODashboard() {
             {activeTab === "chat" && (
               <div className="chat-panel">
                 <ChatLayout userRole="suo" />
-          {activeTab === "attendance" && <SuoAttendance />}
-
-          {activeTab === "feed" && (
-            <Feed
-              profileImage={profileImage}
-              profileName={profileData.name}
-              mode="feed"
-            />
-          )}
-
-          {activeTab === "profile" && (
-            <>
-              <div className="banner">
-                <div className="profile-photo-wrapper">
-                  <img src={profileImage} className="profile-photo" alt="SUO Profile" />
-                  <button
-                    className="camera-icon"
-                    onClick={() => fileInputRef.current.click()}
-                  >
-                    <Camera size={16} />
-                  </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    hidden
-                    onChange={handleProfileImageChange}
-                  />
-                </div>
               </div>
             )}
+
+            {activeTab === "attendance" && <SuoAttendance />}
 
             {activeTab === "chatbot" && <Chatbot />}
 
