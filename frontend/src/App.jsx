@@ -33,6 +33,8 @@ import MeetingListPage from "./components/Meetings/MeetingListPage";
 import MeetingCreatePage from "./components/Meetings/MeetingCreatePage";
 import MeetingDetailsPage from "./components/Meetings/MeetingDetailsPage";
 import MeetingRoomPage from "./components/Meetings/MeetingRoomPage";
+import QuizModule from "./components/quiz/QuizModule";
+import QuizLayout from "./components/quiz/QuizLayout";
 
 const App = () => {
   return (
@@ -64,6 +66,15 @@ const App = () => {
         <Route path="/meetings/create" element={<MeetingCreatePage />} />
         <Route path="/meetings/:meetingId" element={<MeetingDetailsPage />} />
         <Route path="/meetings/:meetingId/room" element={<MeetingRoomPage />} />
+
+        <Route
+          path="/quiz/attempt/:attemptId"
+          element={
+            <QuizLayout>
+              <QuizModule attemptOnly />
+            </QuizLayout>
+          }
+        />
 
         {/* ANO DASHBOARD ROUTES (Nested Layout) */}
         <Route path="/ano/*" element={<AnoDashboard />}>

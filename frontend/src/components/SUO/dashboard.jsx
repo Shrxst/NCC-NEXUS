@@ -33,7 +33,6 @@ import { canCreateMeeting, getCurrentRole } from "../Meetings/meetingUtils";
 import { closeSUOSidebar, toggleSUOSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
-import { QUIZ_SESSION_STORAGE_KEY } from "../quiz/quizPersistence";
 
 export default function SUODashboard() {
   const navigate = useNavigate();
@@ -202,13 +201,6 @@ export default function SUODashboard() {
 
     fetchProfile(token);
   }, [navigate]);
-
-  useEffect(() => {
-    const persistedQuiz = localStorage.getItem(QUIZ_SESSION_STORAGE_KEY);
-    if (persistedQuiz) {
-      setActiveTab("quiz");
-    }
-  }, []);
 
   const role = getCurrentRole();
   const canCreate = canCreateMeeting(role);

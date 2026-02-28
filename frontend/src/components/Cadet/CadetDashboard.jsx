@@ -31,7 +31,6 @@ import MeetingDashboardSection from "../Meetings/MeetingDashboardSection";
 import { closeCadetSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
-import { QUIZ_SESSION_STORAGE_KEY } from "../quiz/quizPersistence";
 
 export default function CadetDashboard() {
   const navigate = useNavigate();
@@ -194,13 +193,6 @@ export default function CadetDashboard() {
 
     fetchProfile(token);
   }, [navigate]);
-
-  useEffect(() => {
-    const persistedQuiz = localStorage.getItem(QUIZ_SESSION_STORAGE_KEY);
-    if (persistedQuiz) {
-      setActiveTab("quiz");
-    }
-  }, []);
 
   const firstName = profileData.name ? profileData.name.split(" ")[0] : "Cadet";
 

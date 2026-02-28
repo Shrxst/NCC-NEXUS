@@ -2,6 +2,18 @@
   padding: 24px 32px 32px;
 }
 
+.quiz-in-progress {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.quiz-shell.quiz-attempt-standalone {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  padding: 14px 18px;
+}
+
 .quiz-home-card,
 .quiz-result-card,
 .quiz-admin-card,
