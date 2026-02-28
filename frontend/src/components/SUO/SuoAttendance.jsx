@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2, ClipboardList, Check, X } from "lucide-react";
 import "./suoAttendance.css";
 import { attendanceApi } from "../../api/attendanceApi";
+import {
+  LEAVE_WORKFLOW_STORAGE_KEY,
+  listAllLeaveRequests,
+  updateLeaveRequestStatus,
+} from "../../utils/leaveWorkflowStore";
 
 const calculateAttendance = (attendance, totalDrills) => {
   const attended = attendance.filter((v) => v === "P").length;
@@ -19,10 +24,25 @@ const parseDateTimeInput = (value) => {
   return { drill_date: date, drill_time: time.length === 5 ? `${time}:00` : time };
 };
 
+const toDisplayDateTime = (value) => {
+  if (!value) return "Not available";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(dt);
+};
+
 const SuoAttendance = () => {
+  const [activeView, setActiveView] = useState("attendance");
   const [sessionOptions, setSessionOptions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [sessionDetail, setSessionDetail] = useState(null);
+  const [leaveRequests, setLeaveRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
@@ -34,6 +54,19 @@ const SuoAttendance = () => {
     const dd = String(today.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd} 09:00`;
   }, []);
+
+  const reviewerName = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      return user.name || user.full_name || user.fullName || "SUO";
+    } catch {
+      return "SUO";
+    }
+  }, []);
+
+  const loadLeaveRequests = () => {
+    setLeaveRequests(listAllLeaveRequests());
+  };
 
   const loadSessions = async (preferredSessionId = null) => {
     setLoading(true);
@@ -77,11 +110,25 @@ const SuoAttendance = () => {
 
   useEffect(() => {
     loadSessions();
+    loadLeaveRequests();
   }, []);
 
   useEffect(() => {
     if (selectedSessionId) loadSessionDetail(selectedSessionId);
   }, [selectedSessionId]);
+
+  useEffect(() => {
+    const syncLeaves = () => loadLeaveRequests();
+    const onStorage = (event) => {
+      if (event.key === LEAVE_WORKFLOW_STORAGE_KEY) syncLeaves();
+    };
+    window.addEventListener("focus", syncLeaves);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", syncLeaves);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   const createSession = async () => {
     const nameInput = window.prompt("Enter session name (example: RDC Camp 2026):");
@@ -204,6 +251,15 @@ const SuoAttendance = () => {
     }
   };
 
+  const reviewLeave = (leaveId, status) => {
+    updateLeaveRequestStatus({
+      leaveId,
+      status,
+      reviewerName,
+    });
+    loadLeaveRequests();
+  };
+
   const drills = sessionDetail?.drills || [];
   const cadets = sessionDetail?.cadets || [];
 
@@ -218,103 +274,182 @@ const SuoAttendance = () => {
 
   return (
     <div className="suo-attendance-container">
-      <h2 className="attendance-title">Attendance Monitoring</h2>
+      <h2 className="attendance-title">{activeView === "attendance" ? "Attendance Monitoring" : "View Leave"}</h2>
       {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
 
       <div className="attendance-toolbar">
-        <label className="attendance-label">Session:</label>
-        <select
-          className="attendance-session-select"
-          value={selectedSessionId}
-          onChange={(e) => setSelectedSessionId(e.target.value)}
-          disabled={actionLoading || loading}
+        <button
+          className={`attendance-btn ${activeView === "attendance" ? "attendance-btn-primary" : "attendance-btn-secondary"}`}
+          onClick={() => setActiveView("attendance")}
+          type="button"
         >
-          {sessionOptions.map((sessionName) => (
-            <option key={sessionName.session_id} value={sessionName.session_id}>
-              {sessionName.session_name}
-            </option>
-          ))}
-        </select>
-
-        <button className="attendance-btn attendance-btn-secondary" onClick={createSession} disabled={actionLoading}>
-          <Plus size={18} />
-          <span>Add Session</span>
+          <ClipboardList size={18} />
+          <span>Attendance</span>
+        </button>
+        <button
+          className={`attendance-btn ${activeView === "leave" ? "attendance-btn-primary" : "attendance-btn-secondary"}`}
+          onClick={() => {
+            setActiveView("leave");
+            loadLeaveRequests();
+          }}
+          type="button"
+        >
+          <ClipboardList size={18} />
+          <span>View Leave</span>
         </button>
 
-        <button className="attendance-btn attendance-btn-danger" onClick={removeSession} disabled={actionLoading}>
-          <Trash2 size={18} />
-          <span>Delete Session</span>
-        </button>
+        {activeView === "attendance" && (
+          <>
+            <label className="attendance-label">Session:</label>
+            <select
+              className="attendance-session-select"
+              value={selectedSessionId}
+              onChange={(e) => setSelectedSessionId(e.target.value)}
+              disabled={actionLoading || loading}
+            >
+              {sessionOptions.map((sessionName) => (
+                <option key={sessionName.session_id} value={sessionName.session_id}>
+                  {sessionName.session_name}
+                </option>
+              ))}
+            </select>
 
-        <button className="attendance-btn attendance-btn-secondary" onClick={addDrill} disabled={actionLoading}>
-          <Plus size={18} />
-          <span>Add Drill</span>
-        </button>
+            <button className="attendance-btn attendance-btn-secondary" onClick={createSession} disabled={actionLoading}>
+              <Plus size={18} />
+              <span>Add Session</span>
+            </button>
 
-        <button className="attendance-btn attendance-btn-primary" onClick={downloadCSV} disabled={actionLoading}>
-          <Download size={18} />
-          <span>Download Attendance</span>
-        </button>
+            <button className="attendance-btn attendance-btn-danger" onClick={removeSession} disabled={actionLoading}>
+              <Trash2 size={18} />
+              <span>Delete Session</span>
+            </button>
+
+            <button className="attendance-btn attendance-btn-secondary" onClick={addDrill} disabled={actionLoading}>
+              <Plus size={18} />
+              <span>Add Drill</span>
+            </button>
+
+            <button className="attendance-btn attendance-btn-primary" onClick={downloadCSV} disabled={actionLoading}>
+              <Download size={18} />
+              <span>Download Attendance</span>
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="attendance-table-card">
-        <table className="attendance-table">
-          <thead>
-            <tr>
-              <th className="col-cadet">Cadet Name</th>
-              {drills.map((drill, drillIdx) => (
-                <th key={drill.drill_id} className="col-drill">
-                  <div className="drill-head">
-                    <span>{drill.drill_name || `Drill ${drillIdx + 1}`}</span>
+      {activeView === "attendance" ? (
+        <div className="attendance-table-card">
+          <table className="attendance-table">
+            <thead>
+              <tr>
+                <th className="col-cadet">Cadet Name</th>
+                {drills.map((drill, drillIdx) => (
+                  <th key={drill.drill_id} className="col-drill">
+                    <div className="drill-head">
+                      <span>{drill.drill_name || `Drill ${drillIdx + 1}`}</span>
+                      <button
+                        className="drill-delete"
+                        onClick={() => removeDrill(drill.drill_id)}
+                        title="Remove Drill"
+                        aria-label={`Remove ${drill.drill_name || `Drill ${drillIdx + 1}`}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="drill-date">{`${drill.drill_date} ${String(drill.drill_time).slice(0, 5)}`}</div>
+                  </th>
+                ))}
+                <th>Total Drills</th>
+                <th>Total Attendance</th>
+                <th>Percentage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cadets.map((cadet) => {
+                const { attended, total, percent } = calculateAttendance(cadet.attendance || [], drills.length);
+                return (
+                  <tr key={cadet.regimental_no}>
+                    <td className="cadet-name-cell">{cadet.name}</td>
+                    {drills.map((drill, drillIdx) => {
+                      const status = cadet.attendance?.[drillIdx] ?? null;
+                      return (
+                        <td key={`${cadet.regimental_no}-${drill.drill_id}`}>
+                          {status ? (
+                            <button
+                              className={`attendance-pill ${status === "P" ? "present" : "absent"}`}
+                              onClick={() => toggleAttendance(cadet.regimental_no, drill.drill_id, status)}
+                            >
+                              {status}
+                            </button>
+                          ) : (
+                            <span className="attendance-pill">--</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="total-cell">{total}</td>
+                    <td className="total-cell">{attended}</td>
+                    <td className="total-cell">{percent}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="attendance-table-card leave-table-card">
+          {leaveRequests.length === 0 ? (
+            <p className="leave-empty-text">No leave applications yet.</p>
+          ) : (
+            <div className="leave-list">
+              {leaveRequests.map((leave) => (
+                <div className="leave-row" key={leave.leave_id}>
+                  <div className="leave-main">
+                    <div className="leave-head">
+                      <span className="leave-cadet">{leave.cadet_name}</span>
+                      <span className="leave-regimental">
+                        ({leave.regimental_no || leave.cadet_key || "No ID"})
+                      </span>
+                      <span className={`leave-status-badge status-${leave.status}`}>{leave.status}</span>
+                    </div>
+                    <p className="leave-reason">{leave.reason}</p>
+                    <div className="leave-meta">
+                      <span>Applied: {toDisplayDateTime(leave.created_at)}</span>
+                      {leave.attachment_url ? (
+                        <a href={leave.attachment_url} target="_blank" rel="noreferrer">
+                          {leave.attachment_name || "View Document"}
+                        </a>
+                      ) : (
+                        <span>No document attached</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="leave-actions">
                     <button
-                      className="drill-delete"
-                      onClick={() => removeDrill(drill.drill_id)}
-                      title="Remove Drill"
-                      aria-label={`Remove ${drill.drill_name || `Drill ${drillIdx + 1}`}`}
+                      type="button"
+                      className="leave-action-btn leave-approve"
+                      disabled={leave.status !== "pending"}
+                      onClick={() => reviewLeave(leave.leave_id, "approved")}
                     >
-                      <Trash2 size={14} />
+                      <Check size={16} />
+                      <span>Approve</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="leave-action-btn leave-reject"
+                      disabled={leave.status !== "pending"}
+                      onClick={() => reviewLeave(leave.leave_id, "rejected")}
+                    >
+                      <X size={16} />
+                      <span>Reject</span>
                     </button>
                   </div>
-                  <div className="drill-date">{`${drill.drill_date} ${String(drill.drill_time).slice(0, 5)}`}</div>
-                </th>
+                </div>
               ))}
-              <th>Total Drills</th>
-              <th>Total Attendance</th>
-              <th>Percentage</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cadets.map((cadet) => {
-              const { attended, total, percent } = calculateAttendance(cadet.attendance || [], drills.length);
-              return (
-                <tr key={cadet.regimental_no}>
-                  <td className="cadet-name-cell">{cadet.name}</td>
-                  {drills.map((drill, drillIdx) => {
-                    const status = cadet.attendance?.[drillIdx] ?? null;
-                    return (
-                      <td key={`${cadet.regimental_no}-${drill.drill_id}`}>
-                        {status ? (
-                          <button
-                            className={`attendance-pill ${status === "P" ? "present" : "absent"}`}
-                            onClick={() => toggleAttendance(cadet.regimental_no, drill.drill_id, status)}
-                          >
-                            {status}
-                          </button>
-                        ) : (
-                          <span className="attendance-pill">--</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="total-cell">{total}</td>
-                  <td className="total-cell">{attended}</td>
-                  <td className="total-cell">{percent}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

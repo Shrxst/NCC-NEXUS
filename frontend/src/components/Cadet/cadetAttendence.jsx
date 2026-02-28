@@ -10,11 +10,16 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Send,
   Paperclip,
+  Plus,
 } from "lucide-react";
 import "./cadetAttendene.css";
 import { attendanceApi } from "../../api/attendanceApi";
+import {
+  LEAVE_WORKFLOW_STORAGE_KEY,
+  createLeaveRequest,
+  listLeaveRequestsByCadet,
+} from "../../utils/leaveWorkflowStore";
 
 function getStatusIcon(status) {
   switch (status) {
@@ -29,6 +34,14 @@ function getStatusIcon(status) {
 
 const toDisplayDate = (isoDate) => {
   if (!isoDate) return "";
+  const maybeDate = new Date(isoDate);
+  if (!Number.isNaN(maybeDate.getTime())) {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(maybeDate);
+  }
   const parts = String(isoDate).split("-");
   if (parts.length !== 3) return String(isoDate);
   return `${parts[2]}-${parts[1]}-${parts[0]}`;
@@ -43,50 +56,124 @@ const toDisplayTime = (timeValue) => {
   return `${String(hour).padStart(2, "0")}:${String(mm).padStart(2, "0")} ${suffix}`;
 };
 
+const toDisplayDateTime = (value) => {
+  if (!value) return "Not available";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value);
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(dt);
+};
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Unable to read selected file."));
+    reader.readAsDataURL(file);
+  });
+
+const sortByLatest = (items) =>
+  [...items].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
 export default function CadetAttendance() {
   const [expandedSessions, setExpandedSessions] = useState({ 0: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, percent: 0 });
   const [sessions, setSessions] = useState([]);
+  const [serverLeaveApplications, setServerLeaveApplications] = useState([]);
   const [leaveApplications, setLeaveApplications] = useState([]);
-  const [leaveForm, setLeaveForm] = useState({
-    session: "",
-    drill: "",
-    date: "",
-    time: "",
-    reason: "",
-  });
+
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveTimestamp, setLeaveTimestamp] = useState(new Date());
   const [selectedFile, setSelectedFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef(null);
 
-  const regimentalNo = useMemo(() => {
+  const userInfo = useMemo(() => {
     try {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      return user.regimental_no || "";
+      return JSON.parse(localStorage.getItem("user") || "{}");
     } catch {
-      return "";
+      return {};
     }
   }, []);
 
+  const regimentalNo =
+    userInfo.regimental_no ||
+    localStorage.getItem("regimental_no") ||
+    localStorage.getItem("regimentalNo") ||
+    "";
+  const cadetName =
+    userInfo.name ||
+    userInfo.full_name ||
+    userInfo.fullName ||
+    userInfo.user_name ||
+    userInfo.username ||
+    "Cadet";
+  const cadetKey =
+    regimentalNo ||
+    String(userInfo.user_id || userInfo.id || userInfo.email || cadetName || "cadet").toLowerCase();
+
+  const mergeLeaves = (backendLeaves = []) => {
+    const localLeaves = cadetKey
+      ? listLeaveRequestsByCadet(cadetKey).map((item) => ({
+          leave_id: item.leave_id,
+          session_name: item.session_name || "General Leave Request",
+          drill_name: item.drill_name || "Leave Request",
+          drill_date: item.drill_date || null,
+          drill_time: item.drill_time || null,
+          reason: item.reason,
+          attachment_url: item.attachment_url,
+          attachment_name: item.attachment_name,
+          status: item.status || "pending",
+          reviewed_by_name: item.reviewed_by_name || null,
+          reviewed_at: item.reviewed_at || null,
+          created_at: item.created_at,
+        }))
+      : [];
+
+    const backendNormalized = (backendLeaves || []).map((item) => ({
+      ...item,
+      created_at: item.created_at || new Date().toISOString(),
+    }));
+
+    setLeaveApplications(sortByLatest([...localLeaves, ...backendNormalized]));
+  };
+
   const loadAttendance = async () => {
+    setLoading(true);
+    setError("");
     if (!regimentalNo) {
-      setError("Regimental number not found in session.");
+      setStats({ total: 0, present: 0, absent: 0, percent: 0 });
+      setSessions([]);
+      setServerLeaveApplications([]);
+      mergeLeaves([]);
+      setError("Attendance data unavailable: regimental number missing.");
       setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError("");
     try {
       const res = await attendanceApi.getMyAttendance(regimentalNo);
       const data = res.data?.data || {};
       setStats(data.stats || { total: 0, present: 0, absent: 0, percent: 0 });
       setSessions(data.sessions || []);
-      setLeaveApplications(data.leave_applications || []);
+      setServerLeaveApplications(data.leave_applications || []);
+      mergeLeaves(data.leave_applications || []);
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to load attendance data.");
+      setServerLeaveApplications([]);
+      mergeLeaves([]);
     } finally {
       setLoading(false);
     }
@@ -94,63 +181,77 @@ export default function CadetAttendance() {
 
   useEffect(() => {
     loadAttendance();
-  }, [regimentalNo]);
+  }, [regimentalNo, cadetKey]);
+
+  useEffect(() => {
+    const syncLeaves = () => mergeLeaves(serverLeaveApplications);
+    const onStorage = (event) => {
+      if (event.key === LEAVE_WORKFLOW_STORAGE_KEY) syncLeaves();
+    };
+
+    window.addEventListener("focus", syncLeaves);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("focus", syncLeaves);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [cadetKey, serverLeaveApplications]);
+
+  useEffect(() => {
+    if (!isLeaveModalOpen) return undefined;
+    setLeaveTimestamp(new Date());
+    const timer = setInterval(() => setLeaveTimestamp(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, [isLeaveModalOpen]);
 
   const toggleSession = (idx) => {
     setExpandedSessions((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  const leaveEligibleSessions = sessions.filter((s) => s.status === "current" || s.status === "upcoming");
-  const selectedSessionObj = leaveEligibleSessions.find((s) => String(s.session_id) === String(leaveForm.session));
-  const availableDrills = selectedSessionObj
-    ? selectedSessionObj.drills.filter((d) => d.status === null)
-    : [];
-
-  const handleSessionChange = (val) => {
-    setLeaveForm({ ...leaveForm, session: val, drill: "", date: "", time: "" });
+  const openLeaveModal = () => {
+    setLeaveReason("");
+    setSelectedFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+    setLeaveTimestamp(new Date());
+    setIsLeaveModalOpen(true);
   };
 
-  const handleDrillChange = (val) => {
-    const drill = availableDrills.find((d) => String(d.drill_id) === String(val));
-    setLeaveForm({
-      ...leaveForm,
-      drill: val,
-      date: drill ? toDisplayDate(drill.date) : "",
-      time: drill ? toDisplayTime(drill.time) : "",
-    });
+  const closeLeaveModal = () => {
+    setIsLeaveModalOpen(false);
+    setLeaveReason("");
+    setSelectedFile(null);
+    if (fileRef.current) fileRef.current.value = "";
   };
 
   const handleSubmitLeave = async (e) => {
     e.preventDefault();
-    if (!leaveForm.session || !leaveForm.drill || !leaveForm.reason.trim()) {
-      alert("Please fill in all required fields.");
+    if (!leaveReason.trim()) {
+      window.alert("Please enter reason for leave.");
+      return;
+    }
+    if (!cadetKey) {
+      window.alert("Cadet identity is missing. Please login again.");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("regimental_no", regimentalNo);
-    formData.append("session_id", leaveForm.session);
-    formData.append("drill_id", leaveForm.drill);
-    formData.append("reason", leaveForm.reason.trim());
-    if (selectedFile) formData.append("attachment", selectedFile);
-
     setSubmitting(true);
     try {
-      await attendanceApi.submitLeave(formData);
-      setLeaveForm({ session: "", drill: "", date: "", time: "", reason: "" });
-      setSelectedFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      await loadAttendance();
+      const attachmentUrl = await fileToDataUrl(selectedFile);
+      createLeaveRequest({
+        cadet_key: cadetKey,
+        regimental_no: regimentalNo,
+        cadet_name: cadetName,
+        reason: leaveReason.trim(),
+        attachment_url: attachmentUrl,
+        attachment_name: selectedFile?.name || null,
+      });
+      mergeLeaves(serverLeaveApplications);
+      closeLeaveModal();
     } catch (err) {
-      alert(err?.response?.data?.message || "Failed to submit leave.");
+      window.alert(err?.message || "Failed to submit leave.");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const removeFile = () => {
-    setSelectedFile(null);
-    if (fileRef.current) fileRef.current.value = "";
   };
 
   const attendancePercent =
@@ -258,115 +359,14 @@ export default function CadetAttendance() {
         </div>
       </div>
 
-      <div className="ca-section-card ca-section-card--leave-form">
-        <h2 className="ca-section-heading">Apply for Leave</h2>
-
-        <form className="ca-leave-form" onSubmit={handleSubmitLeave}>
-          <div className="ca-form-grid">
-            <div className="ca-form-group">
-              <label className="ca-form-label">Session *</label>
-              <select
-                className="ca-form-select"
-                value={leaveForm.session}
-                onChange={(e) => handleSessionChange(e.target.value)}
-              >
-                <option value="">Select Session</option>
-                {leaveEligibleSessions.map((s) => (
-                  <option key={s.session_id} value={s.session_id}>
-                    {s.session_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="ca-form-group">
-              <label className="ca-form-label">Drill *</label>
-              <select
-                className="ca-form-select"
-                value={leaveForm.drill}
-                onChange={(e) => handleDrillChange(e.target.value)}
-                disabled={!leaveForm.session}
-              >
-                <option value="">Select Drill</option>
-                {availableDrills.map((d) => (
-                  <option key={d.drill_id} value={d.drill_id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="ca-form-group">
-              <label className="ca-form-label">Date</label>
-              <div className="ca-form-readonly">
-                <CalendarDays size={16} />
-                <span>{leaveForm.date || "Auto-filled on drill selection"}</span>
-              </div>
-            </div>
-
-            <div className="ca-form-group">
-              <label className="ca-form-label">Time</label>
-              <div className="ca-form-readonly">
-                <Clock size={16} />
-                <span>{leaveForm.time || "Auto-filled on drill selection"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="ca-form-group ca-form-full">
-            <label className="ca-form-label">Reason *</label>
-            <textarea
-              className="ca-form-textarea"
-              rows={3}
-              placeholder="Explain your reason for leave..."
-              value={leaveForm.reason}
-              onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-            />
-          </div>
-
-          <div className="ca-form-group ca-form-full">
-            <label className="ca-form-label">Supporting Documents</label>
-            <div className="ca-file-area">
-              {selectedFile ? (
-                <div className="ca-file-chosen">
-                  <Paperclip size={16} />
-                  <span className="ca-file-name">{selectedFile.name}</span>
-                  <button type="button" className="ca-file-remove" onClick={removeFile}>
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="ca-file-upload-btn"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload size={18} />
-                  <span>Upload Document</span>
-                  <span className="ca-file-hint">(PDF, JPG, PNG - Max 5 MB)</span>
-                </button>
-              )}
-              <input
-                type="file"
-                ref={fileRef}
-                hidden
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => {
-                  if (e.target.files[0]) setSelectedFile(e.target.files[0]);
-                }}
-              />
-            </div>
-          </div>
-
-          <button type="submit" className="ca-submit-btn" disabled={submitting}>
-            <Send size={18} />
-            <span>{submitting ? "Submitting..." : "Submit Leave Application"}</span>
-          </button>
-        </form>
-      </div>
-
       <div className="ca-section-card ca-section-card--leave-status">
-        <h2 className="ca-section-heading">Leave Application Status</h2>
+        <div className="ca-leave-heading-row">
+          <h2 className="ca-section-heading">Leave Application Status</h2>
+          <button className="ca-apply-leave-btn" onClick={openLeaveModal} type="button">
+            <Plus size={18} />
+            <span>Apply Leave</span>
+          </button>
+        </div>
 
         {leaveApplications.length === 0 ? (
           <p className="ca-empty-msg">No leave applications submitted yet.</p>
@@ -376,22 +376,26 @@ export default function CadetAttendance() {
               <div key={app.leave_id} className={`ca-leave-card ca-leave-${app.status}`}>
                 <div className="ca-leave-card-top">
                   <div className="ca-leave-info">
-                    <span className="ca-leave-drill">{app.drill_name}</span>
+                    <span className="ca-leave-drill">{app.drill_name || "Leave Request"}</span>
                     <span className="ca-leave-sep">|</span>
-                    <span className="ca-leave-session-name">{app.session_name}</span>
+                    <span className="ca-leave-session-name">{app.session_name || "General Leave"}</span>
                   </div>
-                  <div className={`ca-leave-status ca-status-${app.status}`}>
+                  <button type="button" className={`ca-status-btn ca-status-${app.status}`} disabled>
                     {getStatusIcon(app.status)}
                     <span>{app.status.charAt(0).toUpperCase() + app.status.slice(1)}</span>
-                  </div>
+                  </button>
                 </div>
 
                 <div className="ca-leave-card-body">
                   <div className="ca-leave-detail-row">
                     <CalendarDays size={14} />
-                    <span>{toDisplayDate(app.drill_date)}</span>
+                    <span>{app.drill_date ? toDisplayDate(app.drill_date) : "Date on request"}</span>
                     <Clock size={14} />
-                    <span>{toDisplayTime(app.drill_time)}</span>
+                    <span>{app.drill_time ? toDisplayTime(app.drill_time) : "Time on request"}</span>
+                  </div>
+                  <div className="ca-leave-detail-row">
+                    <Clock size={14} />
+                    <span>Applied at: {toDisplayDateTime(app.created_at)}</span>
                   </div>
                   <p className="ca-leave-reason">
                     <FileText size={14} />
@@ -401,7 +405,7 @@ export default function CadetAttendance() {
                     <div className="ca-leave-doc">
                       <Paperclip size={14} />
                       <a href={app.attachment_url} target="_blank" rel="noreferrer">
-                        View Attachment
+                        {app.attachment_name || "View Attachment"}
                       </a>
                     </div>
                   )}
@@ -417,6 +421,80 @@ export default function CadetAttendance() {
           </div>
         )}
       </div>
+
+      {isLeaveModalOpen && (
+        <div className="ca-leave-modal-overlay" onClick={closeLeaveModal}>
+          <div className="ca-leave-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ca-leave-modal-header">
+              <h3>Apply Leave</h3>
+              <button type="button" className="ca-leave-modal-close" onClick={closeLeaveModal}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form className="ca-leave-modal-form" onSubmit={handleSubmitLeave}>
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">Reason *</label>
+                <textarea
+                  className="ca-form-textarea"
+                  rows={4}
+                  placeholder="Write reason for leave..."
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                />
+              </div>
+
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">Timestamp (Auto)</label>
+                <div className="ca-form-readonly">
+                  <Clock size={16} />
+                  <span>{toDisplayDateTime(leaveTimestamp)}</span>
+                </div>
+              </div>
+
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">Supporting Document</label>
+                <div className="ca-file-area">
+                  {selectedFile ? (
+                    <div className="ca-file-chosen">
+                      <Paperclip size={16} />
+                      <span className="ca-file-name">{selectedFile.name}</span>
+                      <button
+                        type="button"
+                        className="ca-file-remove"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          if (fileRef.current) fileRef.current.value = "";
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="ca-file-upload-btn" onClick={() => fileRef.current?.click()}>
+                      <Upload size={18} />
+                      <span>Attach Document</span>
+                    </button>
+                  )}
+                  <input
+                    type="file"
+                    ref={fileRef}
+                    hidden
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    onChange={(e) => {
+                      if (e.target.files[0]) setSelectedFile(e.target.files[0]);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="ca-submit-btn" disabled={submitting}>
+                <span>{submitting ? "Applying..." : "Apply Leave"}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

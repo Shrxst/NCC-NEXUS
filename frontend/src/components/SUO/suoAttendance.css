@@ -255,6 +255,131 @@
   font-weight: 600;
 }
 
+.leave-table-card {
+  padding: 18px;
+}
+
+.leave-empty-text {
+  margin: 8px 0;
+  color: var(--s-text-secondary, #3d4260);
+}
+
+.leave-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.leave-row {
+  border: 1px solid var(--s-border, rgba(0, 0, 0, 0.06));
+  border-radius: 14px;
+  background: var(--s-surface, #ffffff);
+  padding: 14px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.leave-main {
+  min-width: 0;
+}
+
+.leave-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leave-cadet {
+  font-weight: 700;
+  color: var(--s-text, #1a1d2e);
+}
+
+.leave-regimental {
+  font-size: 13px;
+  color: var(--s-text-muted, #8b90a8);
+}
+
+.leave-status-badge {
+  text-transform: capitalize;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.leave-status-badge.status-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.leave-status-badge.status-approved {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.leave-status-badge.status-rejected {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+}
+
+.leave-reason {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--s-text-secondary, #3d4260);
+}
+
+.leave-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--s-text-muted, #8b90a8);
+}
+
+.leave-meta a {
+  color: var(--s-primary, #5C6BC0);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.leave-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leave-action-btn {
+  border: none;
+  border-radius: 10px;
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.leave-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.leave-approve {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+.leave-reject {
+  background: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+}
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
   .suo-attendance-container {
@@ -292,6 +417,16 @@
   .attendance-table th,
   .attendance-table td {
     padding: 10px 8px;
+  }
+  .leave-row {
+    flex-direction: column;
+  }
+  .leave-actions {
+    width: 100%;
+  }
+  .leave-action-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 
