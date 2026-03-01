@@ -436,6 +436,24 @@
   width: calc(100vw - var(--d-sidebar-w));
 }
 
+.cadet-dashboard .main.chatbot-active {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cadet-dashboard .main.chatbot-active .tricolor-bar,
+.cadet-dashboard .main.chatbot-active .cadet-topbar {
+  flex-shrink: 0;
+}
+
+.cadet-dashboard .chatbot-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* =======================================================================
    CHAT PANEL
    ======================================================================= */

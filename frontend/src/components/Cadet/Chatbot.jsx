@@ -5,6 +5,24 @@ import './Chatbot.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+const authHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const formatMessageText = (text, sender) => {
+  const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (sender !== "bot") return normalized;
+
+  return normalized
+    .replace(/\*\*/g, "")
+    .replace(/(^|\s)\*\s+/g, "$1\n- ")
+    .replace(/^\s*-\s+/gm, "- ")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
 const Chatbot = () => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -26,7 +44,9 @@ const Chatbot = () => {
   const fetchChatHistory = async () => {
     try {
       // Connects to the backend we just built
-      const response = await axios.get(`${API_BASE_URL}/api/chat`);
+      const response = await axios.get(`${API_BASE_URL}/api/chat`, {
+        headers: authHeaders(),
+      });
       
       // Transform Backend Data (DB columns) to Frontend Format
       // Backend uses 'message', Frontend uses 'text'
@@ -102,12 +122,12 @@ const Chatbot = () => {
     setIsLoading(true); // Show "Thinking..." bubble immediately
 
     try {
-      // B. Send to Backend
-      // Pass 'cadetId' if you have login (e.g., from localStorage)
-      const response = await axios.post(`${API_BASE_URL}/api/chat`, {
-        message: text,
-        cadetId: 1 // Default ID or fetch from Auth Context
-      });
+      // B. Send to backend
+      const response = await axios.post(
+        `${API_BASE_URL}/api/chat`,
+        { message: text },
+        { headers: authHeaders() }
+      );
 
       // C. Trigger Streaming with Real AI Response
       // The backend returns: { user: {...}, bot: { message: "..." } }
@@ -124,7 +144,7 @@ const Chatbot = () => {
       setMessages(prev => [...prev, {
         id: Date.now(),
         sender: 'bot',
-        text: "Connection error. Please check your backend server.",
+        text: error?.response?.data?.message || "Connection error. Please check your backend server.",
         timestamp: new Date().toISOString()
       }]);
     }
@@ -142,7 +162,7 @@ const Chatbot = () => {
           {messages.map((msg) => (
             <div key={msg.id} className={`message-wrapper ${msg.sender === 'bot' ? 'bot-align' : 'user-align'}`}>
               <div className={`message-bubble ${msg.sender === 'bot' ? 'bot-style' : 'user-style'}`}>
-                <div className="content">{msg.text}</div>
+                <div className="content">{formatMessageText(msg.text, msg.sender)}</div>
                 <div className="time-label">
                   {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}
                 </div>
@@ -153,7 +173,7 @@ const Chatbot = () => {
           {streamingMessage && (
             <div className="message-wrapper bot-align">
               <div className="message-bubble bot-style">
-                <div className="content">{streamingMessage.text}</div>
+                <div className="content">{formatMessageText(streamingMessage.text, "bot")}</div>
                 <div className="time-label">typing...</div>
               </div>
             </div>
