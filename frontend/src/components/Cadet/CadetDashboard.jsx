@@ -31,12 +31,20 @@ import MeetingDashboardSection from "../Meetings/MeetingDashboardSection";
 import { closeCadetSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
+import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
+import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
+import { resolveProfileImage } from "../../utils/profileImage";
 
 export default function CadetDashboard() {
+  const CADET_TAB_STORAGE_KEY = "cadet_dashboard_active_tab";
+  const CADET_ALLOWED_TABS = ["profile", "feed", "attendance", "meetings", "quiz", "chatbot", "chat"];
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() =>
+    getStoredDashboardTab(CADET_TAB_STORAGE_KEY, "profile", CADET_ALLOWED_TABS)
+  );
   const [showReset, setShowReset] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -53,12 +61,6 @@ export default function CadetDashboard() {
   });
 
   const fileInputRef = useRef(null);
-
-    const withCacheBuster = (url) => {
-    if (!url) return defaultProfileImage;
-    const joiner = String(url).includes("?") ? "&" : "?";
-    return `${url}${joiner}v=${Date.now()}`;
-  };
 
   const fetchProfile = async (token, { silent = false } = {}) => {
     try {
@@ -85,7 +87,8 @@ export default function CadetDashboard() {
         bio: data.bio || "Add your bio using edit button.",
       });
 
-      setProfileImage(withCacheBuster(data.profile_image_url));
+      const resolvedImage = await resolveProfileImage(data.profile_image_url, defaultProfileImage);
+      setProfileImage(resolvedImage);
       return true;
     } catch (error) {
       console.error("Fetch Profile Error:", error);
@@ -157,6 +160,8 @@ const handleProfileImageChange = async (e) => {
     return;
   }
 
+  const previousImage = profileImage;
+
   // Show instant preview
   const previewUrl = URL.createObjectURL(file);
   setProfileImage(previewUrl);
@@ -170,7 +175,10 @@ const handleProfileImageChange = async (e) => {
 
     // Replace preview with actual Cloudinary URL (with cache busting)
     if (data?.profile_image_url) {
-      setProfileImage(data.profile_image_url + "?v=" + Date.now());
+      const resolvedImage = await resolveProfileImage(data.profile_image_url, previousImage || defaultProfileImage);
+      setProfileImage(resolvedImage);
+    } else {
+      await fetchProfile(token, { silent: true });
     }
 
     setSelectedImageFile(null);
@@ -214,7 +222,10 @@ const [isEditingBio, setIsEditingBio] = useState(false);
 
     // If image was also updated along with bio, update it instantly
     if (data?.profile_image_url) {
-      setProfileImage(data.profile_image_url + "?v=" + Date.now());
+      const resolvedImage = await resolveProfileImage(data.profile_image_url, profileImage || defaultProfileImage);
+      setProfileImage(resolvedImage);
+    } else {
+      await fetchProfile(token, { silent: true });
     }
 
     setSelectedImageFile(null);
@@ -232,15 +243,18 @@ const [isEditingBio, setIsEditingBio] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
 
-    if (!token || role !== "CADET") {
+    if (!hasAuthFor(["CADET"])) {
       navigate("/");
       return;
     }
 
     fetchProfile(token);
   }, [navigate]);
+
+  useEffect(() => {
+    persistDashboardTab(CADET_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   const firstName = profileData.name ? profileData.name.split(" ")[0] : "Cadet";
 
@@ -387,9 +401,7 @@ const [isEditingBio, setIsEditingBio] = useState(false);
               className="topbar-logout"
               onClick={() => {
                 dispatch(closeCadetSidebar());
-                localStorage.removeItem("token");
-                localStorage.removeItem("role");
-                localStorage.removeItem("user");
+                clearAuthStorage();
                 navigate("/");
               }}
             >

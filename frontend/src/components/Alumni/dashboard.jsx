@@ -24,13 +24,21 @@ import MeetingListPage from "../Meetings/MeetingListPage";
 import MeetingDashboardSection from "../Meetings/MeetingDashboardSection";
 import { closeAlumniSidebar, toggleAlumniSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
+import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
+import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
+import { resolveProfileImage } from "../../utils/profileImage";
 
 export default function AlumniDashboard() {
+  const ALUMNI_TAB_STORAGE_KEY = "alumni_dashboard_active_tab";
+  const ALUMNI_ALLOWED_TABS = ["profile", "feed", "meetings", "chat"];
+
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const isAlumniSidebarOpen = useSelector((state) => state.ui.isAlumniSidebarOpen);
 
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() =>
+    getStoredDashboardTab(ALUMNI_TAB_STORAGE_KEY, "profile", ALUMNI_ALLOWED_TABS)
+  );
   const [showReset, setShowReset] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
@@ -49,12 +57,6 @@ export default function AlumniDashboard() {
 
   const fileInputRef = useRef(null);
 
-    const withCacheBuster = (url) => {
-    if (!url) return defaultProfileImage;
-    const joiner = String(url).includes("?") ? "&" : "?";
-    return `${url}${joiner}v=${Date.now()}`;
-  };
-
   const fetchProfile = async (token, { silent = false } = {}) => {
     try {
       setLoadingProfile(true);
@@ -68,11 +70,7 @@ export default function AlumniDashboard() {
       const data = await response.json();
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem("token");
-          localStorage.removeItem("role");
-          localStorage.removeItem("system_role");
-          localStorage.removeItem("rank");
-          localStorage.removeItem("user");
+          clearAuthStorage();
           navigate("/");
           return false;
         }
@@ -90,7 +88,8 @@ export default function AlumniDashboard() {
         bio: data.bio || "Alumni profile bio is not editable yet.",
       });
 
-      setProfileImage(withCacheBuster(data.profile_image_url));
+      const resolvedImage = await resolveProfileImage(data.profile_image_url, defaultProfileImage);
+      setProfileImage(resolvedImage);
       return true;
     } catch (error) {
       console.error("Fetch Alumni Profile Error:", error);
@@ -164,6 +163,7 @@ const handleProfileImageChange = async (e) => {
     return;
   }
 
+  const previousImage = profileImage;
   // Show instant preview
   const previewUrl = URL.createObjectURL(file);
   setProfileImage(previewUrl);
@@ -176,7 +176,10 @@ const handleProfileImageChange = async (e) => {
 
     // Replace preview with actual saved image
     if (data?.profile_image_url) {
-      setProfileImage(data.profile_image_url + "?v=" + Date.now());
+      const resolvedImage = await resolveProfileImage(data.profile_image_url, previousImage || defaultProfileImage);
+      setProfileImage(resolvedImage);
+    } else {
+      await fetchProfile(token, { silent: true });
     }
   } catch (error) {
   console.error("Image Upload Error:", error);
@@ -188,6 +191,8 @@ const handleProfileImageChange = async (e) => {
   if (token) {
     fetchProfile(token, { silent: true });
   }
+} finally {
+  URL.revokeObjectURL(previewUrl);
 }
 };
 
@@ -208,15 +213,18 @@ const startEditBio = () => {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
 
-    if (!token || role !== "ALUMNI") {
+    if (!hasAuthFor(["ALUMNI"])) {
       navigate("/");
       return;
     }
 
     fetchProfile(token);
   }, [navigate]);
+
+  useEffect(() => {
+    persistDashboardTab(ALUMNI_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   return (
     <>
@@ -320,11 +328,7 @@ const startEditBio = () => {
                 className="topbar-logout"
                 onClick={() => {
                   dispatch(closeAlumniSidebar());
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("role");
-                  localStorage.removeItem("system_role");
-                  localStorage.removeItem("rank");
-                  localStorage.removeItem("user");
+                  clearAuthStorage();
                   navigate("/");
                 }}
               >

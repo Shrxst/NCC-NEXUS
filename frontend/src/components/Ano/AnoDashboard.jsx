@@ -1,24 +1,40 @@
 import { useEffect } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { LogOut } from "lucide-react";
 import { closeAnoSidebar, toggleAnoSidebar } from "../../features/ui/uiSlice";
 import Sidebar from "./SideBar";
+import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import "./ano.css";
 
 const AnoDashboard = () => {
+  const ANO_LAST_ROUTE_KEY = "ano_dashboard_last_route";
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const isAnoSidebarOpen = useSelector((state) => state.ui.isAnoSidebarOpen);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-
-    if (!token || role !== "ANO") {
+    if (!hasAuthFor(["ANO"])) {
       navigate("/");
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/ano")) {
+      localStorage.setItem(ANO_LAST_ROUTE_KEY, location.pathname);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname !== "/ano") return;
+
+    const lastRoute = localStorage.getItem(ANO_LAST_ROUTE_KEY);
+    if (lastRoute && lastRoute !== "/ano" && lastRoute.startsWith("/ano")) {
+      navigate(lastRoute, { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   return (
     <div className="ano-dashboard-layout">
@@ -50,9 +66,7 @@ const AnoDashboard = () => {
             className="topbar-logout"
             onClick={() => {
               dispatch(closeAnoSidebar());
-              localStorage.removeItem("token");
-              localStorage.removeItem("role");
-              localStorage.removeItem("user");
+              clearAuthStorage();
               navigate("/");
             }}
           >
