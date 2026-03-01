@@ -27,6 +27,7 @@ const postRoutes = require("./routes/post.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const attendanceRoutes = require("./modules/attendance/attendance.routes");
 const quizRoutes = require("./modules/quiz/routes/quiz.routes");
+const leaveRoutes = require("./modules/leave/leave.routes");
 
 // ------------------------------------------
 // 4. App & Server Setup
@@ -90,6 +91,7 @@ app.use("/api/posts", postRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/quiz", quizRoutes);
+app.use("/api/leave", leaveRoutes);
 // 9. Global Error Handler
 // ------------------------------------------
 app.use((err, req, res, next) => {

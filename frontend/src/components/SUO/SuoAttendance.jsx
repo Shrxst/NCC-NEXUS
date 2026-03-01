@@ -2,11 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Download, Plus, Trash2, ClipboardList, Check, X, ChevronDown, ChevronUp } from "lucide-react";
 import "./suoAttendance.css";
 import { attendanceApi } from "../../api/attendanceApi";
-import {
-  LEAVE_WORKFLOW_STORAGE_KEY,
-  listAllLeaveRequests,
-  updateLeaveRequestStatus,
-} from "../../utils/leaveWorkflowStore";
+import { leaveApi } from "../../api/leaveApi";
 
 const calculateAttendance = (attendance, totalDrills) => {
   const attended = attendance.filter((v) => v === "P").length;
@@ -56,17 +52,15 @@ const SuoAttendance = () => {
     return `${yyyy}-${mm}-${dd} 09:00`;
   }, []);
 
-  const reviewerName = useMemo(() => {
+  const loadLeaveRequests = async () => {
     try {
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      return user.name || user.full_name || user.fullName || "SUO";
-    } catch {
-      return "SUO";
+      const res = await leaveApi.getAll();
+      setLeaveRequests(Array.isArray(res?.data?.data) ? res.data.data : []);
+    } catch (err) {
+      setLeaveRequests([]);
+      const serverMessage = err?.response?.data?.message;
+      if (serverMessage) setError(serverMessage);
     }
-  }, []);
-
-  const loadLeaveRequests = () => {
-    setLeaveRequests(listAllLeaveRequests());
   };
 
   const loadSessions = async (preferredSessionId = null) => {
@@ -117,19 +111,6 @@ const SuoAttendance = () => {
   useEffect(() => {
     if (selectedSessionId) loadSessionDetail(selectedSessionId);
   }, [selectedSessionId]);
-
-  useEffect(() => {
-    const syncLeaves = () => loadLeaveRequests();
-    const onStorage = (event) => {
-      if (event.key === LEAVE_WORKFLOW_STORAGE_KEY) syncLeaves();
-    };
-    window.addEventListener("focus", syncLeaves);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("focus", syncLeaves);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
 
   const createSession = async () => {
     const nameInput = window.prompt("Enter session name (example: RDC Camp 2026):");
@@ -252,13 +233,13 @@ const SuoAttendance = () => {
     }
   };
 
-  const reviewLeave = (leaveId, status) => {
-    updateLeaveRequestStatus({
-      leaveId,
-      status,
-      reviewerName,
-    });
-    loadLeaveRequests();
+  const reviewLeave = async (leaveId, status) => {
+    try {
+      await leaveApi.reviewStatus(leaveId, { status });
+      await loadLeaveRequests();
+    } catch (err) {
+      window.alert(err?.response?.data?.message || "Unable to update leave status.");
+    }
   };
 
   const drills = sessionDetail?.drills || [];
