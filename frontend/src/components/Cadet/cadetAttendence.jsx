@@ -15,11 +15,7 @@ import {
 } from "lucide-react";
 import "./cadetAttendene.css";
 import { attendanceApi } from "../../api/attendanceApi";
-import {
-  LEAVE_WORKFLOW_STORAGE_KEY,
-  createLeaveRequest,
-  listLeaveRequestsByCadet,
-} from "../../utils/leaveWorkflowStore";
+import { leaveApi } from "../../api/leaveApi";
 
 function getStatusIcon(status) {
   switch (status) {
@@ -69,28 +65,12 @@ const toDisplayDateTime = (value) => {
   }).format(dt);
 };
 
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    if (!file) {
-      resolve(null);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Unable to read selected file."));
-    reader.readAsDataURL(file);
-  });
-
-const sortByLatest = (items) =>
-  [...items].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
 export default function CadetAttendance() {
   const [expandedSessions, setExpandedSessions] = useState({ 0: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, percent: 0 });
   const [sessions, setSessions] = useState([]);
-  const [serverLeaveApplications, setServerLeaveApplications] = useState([]);
   const [leaveApplications, setLeaveApplications] = useState([]);
 
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -124,40 +104,13 @@ export default function CadetAttendance() {
     regimentalNo ||
     String(userInfo.user_id || userInfo.id || userInfo.email || cadetName || "cadet").toLowerCase();
 
-  const mergeLeaves = (backendLeaves = []) => {
-    const localLeaves = cadetKey
-      ? listLeaveRequestsByCadet(cadetKey).map((item) => ({
-          leave_id: item.leave_id,
-          session_name: item.session_name || "General Leave Request",
-          drill_name: item.drill_name || "Leave Request",
-          drill_date: item.drill_date || null,
-          drill_time: item.drill_time || null,
-          reason: item.reason,
-          attachment_url: item.attachment_url,
-          attachment_name: item.attachment_name,
-          status: item.status || "pending",
-          reviewed_by_name: item.reviewed_by_name || null,
-          reviewed_at: item.reviewed_at || null,
-          created_at: item.created_at,
-        }))
-      : [];
-
-    const backendNormalized = (backendLeaves || []).map((item) => ({
-      ...item,
-      created_at: item.created_at || new Date().toISOString(),
-    }));
-
-    setLeaveApplications(sortByLatest([...localLeaves, ...backendNormalized]));
-  };
-
   const loadAttendance = async () => {
     setLoading(true);
     setError("");
     if (!regimentalNo) {
       setStats({ total: 0, present: 0, absent: 0, percent: 0 });
       setSessions([]);
-      setServerLeaveApplications([]);
-      mergeLeaves([]);
+      setLeaveApplications([]);
       setError("Attendance data unavailable: regimental number missing.");
       setLoading(false);
       return;
@@ -168,34 +121,29 @@ export default function CadetAttendance() {
       const data = res.data?.data || {};
       setStats(data.stats || { total: 0, present: 0, absent: 0, percent: 0 });
       setSessions(data.sessions || []);
-      setServerLeaveApplications(data.leave_applications || []);
-      mergeLeaves(data.leave_applications || []);
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to load attendance data.");
-      setServerLeaveApplications([]);
-      mergeLeaves([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadMyLeaves = async () => {
+    try {
+      const res = await leaveApi.getMy();
+      const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
+      setLeaveApplications(rows);
+    } catch (err) {
+      setLeaveApplications([]);
+      const serverMessage = err?.response?.data?.message;
+      if (serverMessage) setError(serverMessage);
+    }
+  };
+
   useEffect(() => {
     loadAttendance();
+    loadMyLeaves();
   }, [regimentalNo, cadetKey]);
-
-  useEffect(() => {
-    const syncLeaves = () => mergeLeaves(serverLeaveApplications);
-    const onStorage = (event) => {
-      if (event.key === LEAVE_WORKFLOW_STORAGE_KEY) syncLeaves();
-    };
-
-    window.addEventListener("focus", syncLeaves);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("focus", syncLeaves);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, [cadetKey, serverLeaveApplications]);
 
   useEffect(() => {
     if (!isLeaveModalOpen) return undefined;
@@ -236,19 +184,15 @@ export default function CadetAttendance() {
 
     setSubmitting(true);
     try {
-      const attachmentUrl = await fileToDataUrl(selectedFile);
-      createLeaveRequest({
-        cadet_key: cadetKey,
-        regimental_no: regimentalNo,
-        cadet_name: cadetName,
-        reason: leaveReason.trim(),
-        attachment_url: attachmentUrl,
-        attachment_name: selectedFile?.name || null,
-      });
-      mergeLeaves(serverLeaveApplications);
+      const formData = new FormData();
+      formData.append("reason", leaveReason.trim());
+      if (selectedFile) formData.append("document", selectedFile);
+
+      await leaveApi.apply(formData);
+      await loadMyLeaves();
       closeLeaveModal();
     } catch (err) {
-      window.alert(err?.message || "Failed to submit leave.");
+      window.alert(err?.response?.data?.message || err?.message || "Failed to submit leave.");
     } finally {
       setSubmitting(false);
     }
