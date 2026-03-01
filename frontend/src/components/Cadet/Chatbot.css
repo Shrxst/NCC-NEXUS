@@ -1,5 +1,12 @@
 /* ================= NCC NEXUS — CHATBOT (Premium Light) ================= */
 
+.cadet-chatbot {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
 .cadet-chatbot .chatbot-inner-wrapper {
   display: flex;
   flex-direction: column;
@@ -56,11 +63,12 @@
 .cadet-chatbot .scrollable-chat-window {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 28px 120px 28px;
+  padding: 24px 28px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   scroll-behavior: smooth;
+  min-height: 0;
 }
 
 .cadet-chatbot .scrollable-chat-window::-webkit-scrollbar { width: 4px; }
@@ -88,6 +96,11 @@
   word-wrap: break-word;
   position: relative;
   animation: chatFadeIn 0.3s ease-out forwards;
+}
+
+.cadet-chatbot .message-bubble .content {
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 @keyframes chatFadeIn {
@@ -144,16 +157,13 @@
 
 /* ── Fixed Input Section ── */
 .cadet-chatbot .fixed-input-section {
-  position: absolute;
-  bottom: 0;
-  left: 0;
   width: 100%;
+  flex-shrink: 0;
   padding: 14px 28px 22px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid rgba(0, 0, 0, 0.05);
-  z-index: 10;
 }
 
 .cadet-chatbot .chat-input-wrapper {
@@ -222,7 +232,7 @@
 @media (max-width: 768px) {
   .cadet-chatbot .fixed-top-bar { padding: 14px 18px; }
   .cadet-chatbot .chat-title { font-size: 16px; }
-  .cadet-chatbot .scrollable-chat-window { padding: 16px 18px 100px 18px; }
+  .cadet-chatbot .scrollable-chat-window { padding: 16px 18px 14px; }
   .cadet-chatbot .message-bubble { max-width: 88%; font-size: 13px; padding: 12px 14px; }
   .cadet-chatbot .fixed-input-section { padding: 10px 16px 16px; }
 }

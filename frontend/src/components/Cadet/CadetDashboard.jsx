@@ -385,7 +385,7 @@ const [isEditingBio, setIsEditingBio] = useState(false);
           />
         )}
 
-        <main className={`main ${sidebarOpen ? "sidebar-open" : ""}`}>
+        <main className={`main ${sidebarOpen ? "sidebar-open" : ""} ${activeTab === "chatbot" ? "chatbot-active" : ""}`}>
           <div className="tricolor-bar" />
 
           <div className="cadet-topbar">
@@ -416,7 +416,11 @@ const [isEditingBio, setIsEditingBio] = useState(false);
             </div>
           )}
 
-          {activeTab === "chatbot" && <Chatbot />}
+          {activeTab === "chatbot" && (
+            <div className="chatbot-panel">
+              <Chatbot />
+            </div>
+          )}
 
           {activeTab === "meetings" && (
             <div className="meeting-tab-shell">

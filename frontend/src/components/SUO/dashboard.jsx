@@ -355,7 +355,7 @@ export default function SUODashboard() {
 
           </aside>
 
-          <main className={`main ${isSUOSidebarOpen ? "sidebar-open" : ""}`}>
+          <main className={`main ${isSUOSidebarOpen ? "sidebar-open" : ""} ${activeTab === "chatbot" ? "chatbot-active" : ""}`}>
             <div className="tricolor-bar" />
             <div className="cadet-topbar">
               <button
@@ -387,7 +387,11 @@ export default function SUODashboard() {
 
             {activeTab === "attendance" && <SuoAttendance />}
 
-            {activeTab === "chatbot" && <Chatbot />}
+            {activeTab === "chatbot" && (
+              <div className="chatbot-panel">
+                <Chatbot />
+              </div>
+            )}
             {activeTab === "quiz" && (
               <QuizModule
                 participantName={profileData.name || "SUO"}

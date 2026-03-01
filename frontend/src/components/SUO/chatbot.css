@@ -1,5 +1,12 @@
 /* ================= NCC NEXUS — SUO CHATBOT (Premium Light) ================= */
 
+.suo-chatbot {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
 .suo-chatbot .chatbot-inner-wrapper {
   display: flex;
   flex-direction: column;
@@ -40,11 +47,12 @@
 .suo-chatbot .scrollable-chat-window {
   flex: 1;
   overflow-y: auto;
-  padding: 30px 40px 120px 40px;
+  padding: 30px 40px 20px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   scroll-behavior: smooth;
+  min-height: 0;
 }
 
 /* Custom Scrollbar */
@@ -79,6 +87,11 @@
   animation: fadeInBubble 0.3s ease-out forwards;
 }
 
+.suo-chatbot .message-bubble .content {
+  white-space: pre-line;
+  word-break: break-word;
+}
+
 @keyframes fadeInBubble {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -109,14 +122,11 @@
 
 /* Fixed Input Section */
 .suo-chatbot .fixed-input-section {
-  position: absolute;
-  bottom: 0;
-  left: 0;
   width: 100%;
+  flex-shrink: 0;
   padding: 20px 40px 30px 40px;
   background: var(--s-surface, #ffffff);
   border-top: 1px solid var(--s-border, rgba(0, 0, 0, 0.06));
-  z-index: 10;
 }
 
 .suo-chatbot .chat-input-wrapper {
@@ -203,7 +213,7 @@
 /* Responsive */
 @media (max-width: 768px) {
   .suo-chatbot .fixed-top-bar { padding: 15px 20px; }
-  .suo-chatbot .scrollable-chat-window { padding: 15px 20px 100px 20px; }
+  .suo-chatbot .scrollable-chat-window { padding: 15px 20px 12px; }
   .suo-chatbot .message-bubble { max-width: 90%; font-size: 14px; }
   .suo-chatbot .fixed-input-section { padding: 10px 15px 20px 15px; }
 }
