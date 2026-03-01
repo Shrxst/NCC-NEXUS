@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { FaMedal, FaLock, FaTimes } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { connectChatSocket } from "../../features/ui/socket";
-import { connectFeedSocket } from "../../features/feed/feedSocket";
-import { connectNotificationSocket } from "../../features/notifications/notificationSocket";
+import { connectChatSocket, disconnectChatSocket } from "../../features/ui/socket";
+import { connectFeedSocket, disconnectFeedSocket } from "../../features/feed/feedSocket";
+import { connectNotificationSocket, disconnectNotificationSocket } from "../../features/notifications/notificationSocket";
 import nccLogo from "../assets/ncc-logo.png";
 
 const LoginPage = ({ isModal = false, onClose }) => {
@@ -21,7 +21,7 @@ const LoginPage = ({ isModal = false, onClose }) => {
     };
 
     if (!payload.regimental_no || !payload.password) {
-      alert("Please enter regimental number and password.");
+      alert(role === "ALUMNI" ? "Please enter alumni email/username and password." : "Please enter regimental number and password.");
       return;
     }
 
@@ -37,6 +37,16 @@ const LoginPage = ({ isModal = false, onClose }) => {
       const data = await response.json();
 
       if (!response.ok) {
+        // Clear stale auth to prevent unauthorized notification/socket noise.
+        disconnectChatSocket();
+        disconnectFeedSocket();
+        disconnectNotificationSocket();
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("system_role");
+        localStorage.removeItem("rank");
+        localStorage.removeItem("user");
+
         alert(`Login Failed: ${data.message || "Invalid Credentials"}`);
         return;
       }
@@ -106,7 +116,7 @@ const LoginPage = ({ isModal = false, onClose }) => {
             <FaMedal className="input-icon" />
             <input
               type="text"
-              placeholder="Regimental Number"
+              placeholder={role === "ALUMNI" ? "Email / Username / Regimental No." : "Regimental Number"}
               value={regimentalNo}
               onChange={(e) => setRegimentalNo(e.target.value)}
               disabled={loading}
@@ -144,3 +154,6 @@ const LoginPage = ({ isModal = false, onClose }) => {
 };
 
 export default LoginPage;
+
+
+

@@ -1,5 +1,0 @@
-{
-  "dependencies": {
-    "ncc-nexus-backend": "file:.."
-  }
-}

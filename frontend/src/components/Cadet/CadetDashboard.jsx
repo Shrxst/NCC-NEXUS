@@ -54,10 +54,17 @@ export default function CadetDashboard() {
 
   const fileInputRef = useRef(null);
 
-  const fetchProfile = async (token) => {
+    const withCacheBuster = (url) => {
+    if (!url) return defaultProfileImage;
+    const joiner = String(url).includes("?") ? "&" : "?";
+    return `${url}${joiner}v=${Date.now()}`;
+  };
+
+  const fetchProfile = async (token, { silent = false } = {}) => {
     try {
       setLoadingProfile(true);
-      const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/cadet/profile?ts=${Date.now()}`, {
+        cache: "no-store",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -65,7 +72,9 @@ export default function CadetDashboard() {
 
       const data = await response.json();
       if (!response.ok) {
-        alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        if (!silent) {
+          alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        }
         return false;
       }
 
@@ -76,11 +85,13 @@ export default function CadetDashboard() {
         bio: data.bio || "Add your bio using edit button.",
       });
 
-      setProfileImage(data.profile_image_url || defaultProfileImage);
+      setProfileImage(withCacheBuster(data.profile_image_url));
       return true;
     } catch (error) {
       console.error("Fetch Profile Error:", error);
-      alert("Unable to load profile.");
+      if (!silent) {
+        alert("Unable to load profile.");
+      }
       return false;
     } finally {
       setLoadingProfile(false);
@@ -88,61 +99,89 @@ export default function CadetDashboard() {
   };
 
   const updateProfile = async ({ token, bio, imageFile }) => {
-    const formData = new FormData();
-    formData.append("bio", bio || "");
+  const formData = new FormData();
+  formData.append("bio", bio || "");
 
-    if (imageFile) {
-      formData.append("profile_image", imageFile);
-    }
+  if (imageFile) {
+    formData.append("profile_image", imageFile);
+  }
 
-    const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
+  const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || "Unknown error");
+  }
+  return data;
+};
+
+// const uploadProfileWithRetry = async (payload, maxAttempts = 2) => {
+//   let lastError;
+
+//   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+//     try {
+//       await updateProfile(payload);
+//       return;
+//     } catch (error) {
+//       lastError = error;
+//       const isNetworkError =
+//         error instanceof TypeError ||
+//         String(error?.message || "").toLowerCase().includes("failed to fetch");
+
+//       if (!isNetworkError || attempt >= maxAttempts) {
+//         break;
+//       }
+
+//       await new Promise((resolve) => setTimeout(resolve, 700));
+//     }
+//   }
+
+//   throw lastError;
+// };
+const handleProfileImageChange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+
+  if (!file) return;
+
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Session expired. Please login again.");
+    navigate("/");
+    return;
+  }
+
+  // Show instant preview
+  const previewUrl = URL.createObjectURL(file);
+  setProfileImage(previewUrl);
+
+  try {
+    const data = await updateProfile({
+      token,
+      bio: profileData.bio || "",
+      imageFile: file,
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || "Unknown error");
-    }
-  };
-
-  const handleProfileImageChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) {
-      return;
+    // Replace preview with actual Cloudinary URL (with cache busting)
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url + "?v=" + Date.now());
     }
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Session expired. Please login again.");
-      navigate("/");
-      return;
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    setProfileImage(previewUrl);
-    setSelectedImageFile(file);
-
-    try {
-      await updateProfile({
-        token,
-        bio: profileData.bio || "",
-        imageFile: file,
-      });
-      setSelectedImageFile(null);
-      await fetchProfile(token);
-    } catch (error) {
-      console.error("Image Upload Error:", error);
-      alert(`Image upload failed: ${error.message}`);
-    } finally {
-      URL.revokeObjectURL(previewUrl);
-    }
-  };
-
-  const [isEditingBio, setIsEditingBio] = useState(false);
+    setSelectedImageFile(null);
+  } catch (error) {
+    console.error("Image Upload Error:", error);
+    alert(`Image upload failed: ${error.message}`);
+  } finally {
+    URL.revokeObjectURL(previewUrl);
+  }
+};
+const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
 
   const startEditBio = () => {
@@ -151,31 +190,40 @@ export default function CadetDashboard() {
   };
 
   const saveBio = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Session expired. Please login again.");
-      navigate("/");
-      return;
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Session expired. Please login again.");
+    navigate("/");
+    return;
+  }
+
+  const nextBio = tempBio.trim();
+
+  try {
+    const data = await updateProfile({
+      token,
+      bio: nextBio,
+      imageFile: selectedImageFile,
+    });
+
+    // Update bio instantly in UI
+    setProfileData((prev) => ({
+      ...prev,
+      bio: nextBio,
+    }));
+
+    // If image was also updated along with bio, update it instantly
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url + "?v=" + Date.now());
     }
 
-    const nextBio = tempBio.trim();
-
-    try {
-      await updateProfile({
-        token,
-        bio: nextBio,
-        imageFile: selectedImageFile,
-      });
-
-      setProfileData((prev) => ({ ...prev, bio: nextBio }));
-      setSelectedImageFile(null);
-      await fetchProfile(token);
-      setIsEditingBio(false);
-    } catch (error) {
-      console.error("Save Bio Error:", error);
-      alert(`Failed to update profile: ${error.message}`);
-    }
-  };
+    setSelectedImageFile(null);
+    setIsEditingBio(false);
+  } catch (error) {
+    console.error("Save Bio Error:", error);
+    alert(`Failed to update profile: ${error.message}`);
+  }
+};
 
   const cancelEditBio = () => {
     setIsEditingBio(false);
@@ -457,6 +505,7 @@ export default function CadetDashboard() {
                     </div>
                     <button
                       className="camera-icon"
+                      type="button"
                       onClick={() => fileInputRef.current.click()}
                     >
                       <Camera size={14} />
@@ -528,3 +577,9 @@ export default function CadetDashboard() {
     </>
   );
 }
+
+
+
+
+
+

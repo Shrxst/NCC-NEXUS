@@ -48,18 +48,41 @@ const cadetLogin = async (req, res) => {
   }
 
   try {
-    const userData = await db("cadet_profiles as cp")
-      .join("users as u", "cp.user_id", "u.user_id")
-      .leftJoin("cadet_ranks as r", "cp.rank_id", "r.id")
-      .where("cp.regimental_no", regimental_no)
-      .select(
-        "u.user_id",
-        "u.password_hash",
-        "u.role as system_role",
-        "cp.full_name",
-        "r.rank_name"
-      )
-      .first();
+    const loginId = String(regimental_no).trim();
+    let userData;
+
+    if (login_type === "ALUMNI") {
+      userData = await db("users as u")
+        .leftJoin("cadet_profiles as cp", "cp.user_id", "u.user_id")
+        .where("u.role", "ALUMNI")
+        .andWhere((qb) => {
+          qb.where("u.email", loginId)
+            .orWhere("u.username", loginId)
+            .orWhere("cp.regimental_no", loginId);
+        })
+        .select(
+          "u.user_id",
+          "u.password_hash",
+          "u.role as system_role",
+          "u.username as full_name",
+          "cp.regimental_no"
+        )
+        .first();
+    } else {
+      userData = await db("cadet_profiles as cp")
+        .join("users as u", "cp.user_id", "u.user_id")
+        .leftJoin("cadet_ranks as r", "cp.rank_id", "r.id")
+        .where("cp.regimental_no", loginId)
+        .select(
+          "u.user_id",
+          "u.password_hash",
+          "u.role as system_role",
+          "cp.full_name",
+          "cp.regimental_no",
+          "r.rank_name"
+        )
+        .first();
+    }
 
     if (!userData) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -69,7 +92,6 @@ const cadetLogin = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
-
 
     if (login_type === "ALUMNI") {
       if (userData.system_role !== "ALUMNI") {
@@ -96,20 +118,19 @@ const cadetLogin = async (req, res) => {
       user_id: userData.user_id,
       role: userData.system_role,
       rank: userData.rank_name,
-      regimental_no,
+      regimental_no: userData.regimental_no || null,
     });
 
     return res.json({
       message: "Login successful",
       token,
       user: {
-        regimental_no,
+        regimental_no: userData.regimental_no || null,
         name: userData.full_name,
         role: userData.system_role,
-        rank: userData.rank_name,
+        rank: userData.rank_name || null,
       },
     });
-
   } catch (err) {
     console.error("Cadet Login Error:", err);
     return res.status(500).json({ error: err.message });

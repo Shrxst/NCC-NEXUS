@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { FaBell } from "react-icons/fa";
-import { connectNotificationSocket, getNotificationSocket } from "../../features/notifications/notificationSocket";
+import { connectNotificationSocket, getNotificationSocket, disconnectNotificationSocket } from "../../features/notifications/notificationSocket";
 import logoImage from "../assets/ncc-logo.png";
 
 const NavBar = ({ onCadetLogin, onAnoLogin }) => {
@@ -232,3 +232,4 @@ const NavBar = ({ onCadetLogin, onAnoLogin }) => {
 };
 
 export default NavBar;
+

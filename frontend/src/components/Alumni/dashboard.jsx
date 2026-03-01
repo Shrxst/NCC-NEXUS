@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   User,
   MapPin,
@@ -11,6 +11,7 @@ import {
   Award,
   GraduationCap,
   Video,
+  Camera,
 } from "lucide-react";
 import ChatLayout from "../ChatCommon/ChatLayout";
 import { useNavigate } from "react-router-dom";
@@ -22,6 +23,7 @@ import ResetPasswordModal from "./resetPassword";
 import MeetingListPage from "../Meetings/MeetingListPage";
 import MeetingDashboardSection from "../Meetings/MeetingDashboardSection";
 import { closeAlumniSidebar, toggleAlumniSidebar } from "../../features/ui/uiSlice";
+import { API_BASE_URL } from "../../api/config";
 
 export default function AlumniDashboard() {
   const navigate = useNavigate();
@@ -45,10 +47,19 @@ export default function AlumniDashboard() {
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
 
-  const fetchProfile = async (token) => {
+  const fileInputRef = useRef(null);
+
+    const withCacheBuster = (url) => {
+    if (!url) return defaultProfileImage;
+    const joiner = String(url).includes("?") ? "&" : "?";
+    return `${url}${joiner}v=${Date.now()}`;
+  };
+
+  const fetchProfile = async (token, { silent = false } = {}) => {
     try {
       setLoadingProfile(true);
-      const response = await fetch("http://localhost:5000/api/cadet/profile", {
+      const response = await fetch(`${API_BASE_URL}/api/cadet/profile?ts=${Date.now()}`, {
+        cache: "no-store",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -56,7 +67,19 @@ export default function AlumniDashboard() {
 
       const data = await response.json();
       if (!response.ok) {
-        alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        if (response.status === 401) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("role");
+          localStorage.removeItem("system_role");
+          localStorage.removeItem("rank");
+          localStorage.removeItem("user");
+          navigate("/");
+          return false;
+        }
+
+        if (!silent) {
+          alert(`Failed to load profile: ${data.message || "Unknown error"}`);
+        }
         return false;
       }
 
@@ -67,18 +90,108 @@ export default function AlumniDashboard() {
         bio: data.bio || "Alumni profile bio is not editable yet.",
       });
 
-      setProfileImage(data.profile_image_url || defaultProfileImage);
+      setProfileImage(withCacheBuster(data.profile_image_url));
       return true;
     } catch (error) {
       console.error("Fetch Alumni Profile Error:", error);
-      alert("Unable to load profile.");
+      if (!silent) {
+        alert("Unable to load profile.");
+      }
       return false;
     } finally {
       setLoadingProfile(false);
     }
   };
 
-  const startEditBio = () => {
+  const updateProfile = async ({ token, imageFile }) => {
+  const formData = new FormData();
+
+  if (imageFile) {
+    formData.append("profile_image", imageFile);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Unknown error");
+  }
+
+  return data; // ✅ IMPORTANT
+};
+
+// const uploadProfileWithRetry = async (payload, maxAttempts = 2) => {
+//   let lastError;
+
+//   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+//     try {
+//       await updateProfile(payload);
+//       return;
+//     } catch (error) {
+//       lastError = error;
+//       const isNetworkError =
+//         error instanceof TypeError ||
+//         String(error?.message || "").toLowerCase().includes("failed to fetch");
+
+//       if (!isNetworkError || attempt >= maxAttempts) {
+//         break;
+//       }
+
+//       await new Promise((resolve) => setTimeout(resolve, 700));
+//     }
+//   }
+
+//   throw lastError;
+// };
+
+const handleProfileImageChange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+
+  if (!file) return;
+
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Session expired. Please login again.");
+    navigate("/");
+    return;
+  }
+
+  // Show instant preview
+  const previewUrl = URL.createObjectURL(file);
+  setProfileImage(previewUrl);
+
+  try {
+    const data = await updateProfile({
+      token,
+      imageFile: file,
+    });
+
+    // Replace preview with actual saved image
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url + "?v=" + Date.now());
+    }
+  } catch (error) {
+  console.error("Image Upload Error:", error);
+
+  alert(`Image upload failed: ${error.message}`);
+
+  // Revert back to last saved image
+  const token = localStorage.getItem("token");
+  if (token) {
+    fetchProfile(token, { silent: true });
+  }
+}
+};
+
+const startEditBio = () => {
     setTempBio(profileData.bio || "");
     setIsEditingBio(true);
   };
@@ -190,7 +303,6 @@ export default function AlumniDashboard() {
                 </button>
               </div>
             </div>
-
           </aside>
 
           <main className={`main ${isAlumniSidebarOpen ? "sidebar-open" : ""}`}>
@@ -291,7 +403,7 @@ export default function AlumniDashboard() {
                 <MeetingDashboardSection sectionTitle="Invited Meetings" mode="INVITED" basePath="/meetings" />
 
                 <div className="banner">
-                  <span className="banner-watermark">UNITY AND DISCIPLINE</span>
+                  <div className="banner-watermark">UNITY AND DISCIPLINE</div>
                 </div>
 
                 <div className="profile-card">
@@ -300,15 +412,30 @@ export default function AlumniDashboard() {
                       <div className="profile-photo-ring">
                         <img src={profileImage || logoImage} className="profile-photo" alt="Alumni Profile" />
                       </div>
+                      <button
+                        className="camera-icon"
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Camera size={14} />
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        hidden
+                        accept="image/*"
+                        onChange={handleProfileImageChange}
+                      />
                     </div>
 
-                    <h1 className="profile-name">{profileData.name}</h1>
-                    <span className="profile-role-badge">{profileData.rank || "Alumni"}</span>
-
-                    <div className="profile-info">
-                      <div className="info-pill">
-                        <MapPin size={14} />
-                        {profileData.location}
+                    <div className="profile-header-text">
+                      <h1 className="profile-name">{profileData.name}</h1>
+                      <div className="profile-meta">
+                        <span className="profile-role-badge">{profileData.rank || "Alumni"}</span>
+                        <div className="info-pill">
+                          <MapPin size={14} />
+                          {profileData.location}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -355,3 +482,10 @@ export default function AlumniDashboard() {
     </>
   );
 }
+
+
+
+
+
+
+

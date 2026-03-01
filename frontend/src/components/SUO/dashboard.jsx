@@ -56,10 +56,17 @@ export default function SUODashboard() {
 
   const fileInputRef = useRef(null);
 
+  const withCacheBuster = (url) => {
+    if (!url) return defaultProfileImage;
+    const joiner = String(url).includes("?") ? "&" : "?";
+    return `${url}${joiner}v=${Date.now()}`;
+  };
+
   const fetchProfile = async (token) => {
     try {
       setLoadingProfile(true);
-      const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
+      const response = await fetch(`${API_BASE_URL}/api/cadet/profile?ts=${Date.now()}`, {
+        cache: "no-store",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -84,7 +91,7 @@ export default function SUODashboard() {
         bio: data.bio || "Add your bio using edit button.",
       });
 
-      setProfileImage(data.profile_image_url || defaultProfileImage);
+      setProfileImage(withCacheBuster(data.profile_image_url));
       return true;
     } catch (error) {
       console.error("Fetch Profile Error:", error);
@@ -95,60 +102,67 @@ export default function SUODashboard() {
     }
   };
 
-  const updateProfile = async ({ token, bio, imageFile }) => {
-    const formData = new FormData();
-    formData.append("bio", bio || "");
+ const updateProfile = async ({ token, bio, imageFile }) => {
+  const formData = new FormData();
+  formData.append("bio", bio || "");
 
-    if (imageFile) {
-      formData.append("profile_image", imageFile);
-    }
+  if (imageFile) {
+    formData.append("profile_image", imageFile);
+  }
 
-    const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
+  const response = await fetch(`${API_BASE_URL}/api/cadet/profile`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.message || "Unknown error");
-    }
-  };
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Unknown error");
+  }
+
+  return data; // ✅ MUST return
+};
 
   const handleProfileImageChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) {
-      return;
-    }
+  const file = e.target.files[0];
+  e.target.value = "";
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Session expired. Please login again.");
-      navigate("/");
-      return;
-    }
+  if (!file) return;
 
-    const previewUrl = URL.createObjectURL(file);
-    setProfileImage(previewUrl);
-    setSelectedImageFile(file);
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Session expired. Please login again.");
+    navigate("/");
+    return;
+  }
 
-    try {
-      await updateProfile({
-        token,
-        bio: profileData.bio || "",
-        imageFile: file,
-      });
-      setSelectedImageFile(null);
-      await fetchProfile(token);
-    } catch (error) {
-      console.error("Image Upload Error:", error);
-      alert(`Image upload failed: ${error.message}`);
-    } finally {
-      URL.revokeObjectURL(previewUrl);
+  const previewUrl = URL.createObjectURL(file);
+  setProfileImage(previewUrl);
+
+  try {
+    const data = await updateProfile({
+      token,
+      bio: profileData.bio || "",
+      imageFile: file,
+    });
+
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url + "?v=" + Date.now());
     }
-  };
+  } catch (error) {
+    console.error("Image Upload Error:", error);
+    alert(`Image upload failed: ${error.message}`);
+
+    // revert if failed
+    fetchProfile(token);
+  } finally {
+    URL.revokeObjectURL(previewUrl);
+  }
+};
 
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [tempBio, setTempBio] = useState("");
@@ -159,31 +173,38 @@ export default function SUODashboard() {
   };
 
   const saveBio = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      alert("Session expired. Please login again.");
-      navigate("/");
-      return;
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Session expired. Please login again.");
+    navigate("/");
+    return;
+  }
+
+  const nextBio = tempBio.trim();
+
+  try {
+    const data = await updateProfile({
+      token,
+      bio: nextBio,
+      imageFile: selectedImageFile,
+    });
+
+    setProfileData((prev) => ({
+      ...prev,
+      bio: nextBio,
+    }));
+
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url + "?v=" + Date.now());
     }
 
-    const nextBio = tempBio.trim();
-
-    try {
-      await updateProfile({
-        token,
-        bio: nextBio,
-        imageFile: selectedImageFile,
-      });
-
-      setProfileData((prev) => ({ ...prev, bio: nextBio }));
-      setSelectedImageFile(null);
-      await fetchProfile(token);
-      setIsEditingBio(false);
-    } catch (error) {
-      console.error("Save Bio Error:", error);
-      alert(`Failed to update profile: ${error.message}`);
-    }
-  };
+    setSelectedImageFile(null);
+    setIsEditingBio(false);
+  } catch (error) {
+    console.error("Save Bio Error:", error);
+    alert(`Failed to update profile: ${error.message}`);
+  }
+};
 
   const cancelEditBio = () => {
     setIsEditingBio(false);
@@ -521,3 +542,5 @@ export default function SUODashboard() {
     </>
   );
 }
+
+

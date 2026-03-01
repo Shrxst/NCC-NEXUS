@@ -178,6 +178,7 @@ export default function Feed({
 
   const normalizePost = (post = {}) => ({
     id: Number(post.id ?? post.post_id ?? Date.now()),
+    regimental_no: post.regimental_no,
     post_id: Number(post.post_id ?? post.id ?? Date.now()),
     name: post.name || post.full_name || "Cadet",
     role: post.role || post.rank_name || "CADET",
@@ -209,14 +210,21 @@ export default function Feed({
     return Number(post.comments_count ?? 0);
   };
 
-  const mapServerComment = (comment) => ({
+    const mapServerComment = (comment = {}) => ({
     id: Number(comment.comment_id ?? comment.id ?? Date.now()),
     user: comment.full_name || comment.user || "Cadet",
     text: comment.content || comment.text || "",
     createdAt: comment.created_at ? new Date(comment.created_at).getTime() : Date.now(),
-    likes: 0,
-    liked: false,
-    replies: [],
+    likes: Number(comment.likes_count ?? comment.likes ?? 0),
+    liked: Boolean(comment.liked_by_me ?? comment.liked),
+    pinned: Boolean(comment.is_pinned ?? comment.pinned),
+    parentCommentId:
+      comment.parent_comment_id === null || comment.parent_comment_id === undefined
+        ? null
+        : Number(comment.parent_comment_id),
+    replies: Array.isArray(comment.replies)
+      ? comment.replies.map((reply) => mapServerComment(reply))
+      : [],
   });
 
   const fetchCommentsForPost = async (postId) => {
@@ -234,25 +242,32 @@ export default function Feed({
       throw new Error(data.message || "Unable to load comments");
     }
 
-    return Array.isArray(data) ? data.map(mapServerComment) : [];
+    return Array.isArray(data) ? data.map((comment) => mapServerComment(comment)) : [];
+  };
+
+  const refreshCommentsForPost = async (postId) => {
+    const comments = await fetchCommentsForPost(postId);
+
+    setPosts((prev) =>
+      prev.map((p) =>
+        Number(p.id) === Number(postId)
+          ? {
+              ...p,
+              comments,
+              comments_count: getTotalCommentCount(comments),
+            }
+          : p
+      )
+    );
+
+    return comments;
   };
 
   const openComments = async (post) => {
     setCommentPost(post);
 
     try {
-      const comments = await fetchCommentsForPost(post.id);
-      setPosts((prev) =>
-        prev.map((p) =>
-          Number(p.id) === Number(post.id)
-            ? {
-                ...p,
-                comments,
-                comments_count: comments.length,
-              }
-            : p
-        )
-      );
+      await refreshCommentsForPost(post.id);
     } catch (error) {
       console.error("Load Comments Error:", error);
     }
@@ -264,7 +279,7 @@ export default function Feed({
         return count + 1 + countReplies(reply.replies);
       }, 0);
     };
-    
+
     return comments.reduce((count, comment) => {
       return count + 1 + countReplies(comment.replies);
     }, 0);
@@ -321,25 +336,64 @@ export default function Feed({
 
 
   // Pin comment
-  const pinComment = (postId, commentId) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) => ({
-                ...c,
-                pinned: c.id === commentId ? !c.pinned : false,
-              })),
-            }
-          : p
-      )
-    );
+  const pinComment = async (postId, commentId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${postId}/comment/${commentId}/pin`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to pin comment");
+      }
+
+      const nextComments = await refreshCommentsForPost(postId);
+      if (commentPost?.id === postId) {
+        setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+      }
+    } catch (error) {
+      console.error("Pin Comment Error:", error);
+      alert(error.message || "Failed to pin comment.");
+    }
   };
 
   // Report comment
-  const reportComment = (postId, commentId) => {
-    alert("Comment reported successfully!");
+  const reportComment = async (postId, commentId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${postId}/comment/${commentId}/report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: "Inappropriate or abusive" }),
+      });
+
+      const data = await response.json();
+      if (!response.ok && response.status !== 409) {
+        throw new Error(data.message || "Unable to report comment");
+      }
+
+      alert(response.status === 409 ? "You already reported this comment." : "Comment reported successfully!");
+    } catch (error) {
+      console.error("Report Comment Error:", error);
+      alert(error.message || "Failed to report comment.");
+    }
   };
 
   /* ================= FILTER LOGIC ================= */
@@ -398,7 +452,7 @@ export default function Feed({
         return;
       }
 
-      const createdPost = normalizePost({ ...data, name: profileName, role: "ALUMNI" });
+      const createdPost = normalizePost({ ...data, name: profileName, role: "CADET" });
       setPosts((prev) => [createdPost, ...prev.filter((item) => Number(item.id) !== Number(createdPost.id))]);
 
       setText("");
@@ -487,9 +541,32 @@ export default function Feed({
   };
 
   /* ================= DELETE POST ================= */
-  const deletePost = (id) => {
-    setPosts(posts.filter((p) => p.id !== id));
-    setMenuOpen(null);
+  const deletePost = async (id) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to delete post");
+      }
+
+      setPosts((prev) => prev.filter((p) => Number(p.id) !== Number(id)));
+      setMenuOpen(null);
+    } catch (error) {
+      console.error("Delete Post Error:", error);
+      alert("Failed to delete post.");
+    }
   };
 
   /* ================= EDIT POST ================= */
@@ -499,16 +576,46 @@ export default function Feed({
     setMenuOpen(null);
   };
 
-  const handleSaveEdit = () => {
-    setPosts(
-      posts.map((p) =>
-        p.id === editingPost.id ? { ...p, text: editText } : p
-      )
-    );
-    setEditingPost(null);
+  const handleSaveEdit = async () => {
+    if (!editingPost?.id || !editText.trim()) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${editingPost.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ content_text: editText.trim() }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update post");
+      }
+
+      const nextText = data.content_text ?? data.caption ?? editText.trim();
+      setPosts((prev) =>
+        prev.map((p) =>
+          Number(p.id) === Number(editingPost.id)
+            ? { ...p, text: nextText }
+            : p
+        )
+      );
+      setEditingPost(null);
+    } catch (error) {
+      console.error("Update Post Error:", error);
+      alert("Failed to update post.");
+    }
   };
 
-  /* ================= COMMENTS ================= */
+    /* ================= COMMENTS ================= */
   const addComment = async () => {
     const content = commentText.trim();
     if (!content || !commentPost?.id) return;
@@ -534,28 +641,8 @@ export default function Feed({
         throw new Error(data.message || "Unable to add comment");
       }
 
-      const createdComment = {
-        id: Number(data.comment_id ?? Date.now()),
-        user: profileName || "You",
-        text: data.content || content,
-        createdAt: data.created_at ? new Date(data.created_at).getTime() : Date.now(),
-        likes: 0,
-        liked: false,
-        replies: [],
-      };
-
-      setPosts((prev) =>
-        prev.map((p) =>
-          Number(p.id) === Number(commentPost.id)
-            ? {
-                ...p,
-                comments: [...(p.comments || []), createdComment],
-                comments_count: Number(p.comments_count ?? 0) + 1,
-              }
-            : p
-        )
-      );
-
+      const nextComments = await refreshCommentsForPost(commentPost.id);
+      setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
       setCommentText("");
     } catch (error) {
       console.error("Add Comment Error:", error);
@@ -563,203 +650,177 @@ export default function Feed({
     }
   };
 
-  const toggleCommentLike = (postId, commentId) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) =>
-                c.id === commentId
-                  ? {
-                      ...c,
-                      liked: !c.liked,
-                      likes: c.liked ? c.likes - 1 : c.likes + 1,
-                    }
-                  : c
-              ),
-            }
-          : p
-      )
-    );
+  const toggleCommentLike = async (postId, commentId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${postId}/comment/${commentId}/like`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to like comment");
+      }
+
+      const nextComments = await refreshCommentsForPost(postId);
+      if (commentPost?.id === postId) {
+        setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+      }
+    } catch (error) {
+      console.error("Toggle Comment Like Error:", error);
+      alert("Failed to update comment like.");
+    }
   };
 
-  const deleteComment = (postId, commentId) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.filter((c) => c.id !== commentId),
-            }
-          : p
-      )
-    );
+  const deleteComment = async (postId, commentId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FEED_API_URL}/${postId}/comment/${commentId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to delete comment");
+      }
+
+      const nextComments = await refreshCommentsForPost(postId);
+      if (commentPost?.id === postId) {
+        setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+      }
+    } catch (error) {
+      console.error("Delete Comment Error:", error);
+      alert("Failed to delete comment.");
+    }
+  };
+
+  const findCommentById = (comments = [], commentId) => {
+    for (const comment of comments) {
+      if (Number(comment.id) === Number(commentId)) {
+        return comment;
+      }
+      const nested = findCommentById(comment.replies || [], commentId);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
   };
 
   const editComment = (postId, commentId) => {
     const post = posts.find((p) => p.id === postId);
-    const comment = post?.comments.find((c) => c.id === commentId);
+    const comment = findCommentById(post?.comments || [], commentId);
     if (comment) {
       setEditingComment({ postId, commentId });
       setEditCommentText(comment.text);
     }
   };
 
-  const saveEditComment = () => {
-    if (!editCommentText.trim()) return;
+  const saveEditComment = async () => {
+    if (!editingComment || !editCommentText.trim()) return;
 
-    setPosts(
-      posts.map((p) =>
-        p.id === editingComment.postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) =>
-                c.id === editingComment.commentId
-                  ? { ...c, text: editCommentText }
-                  : c
-              ),
-            }
-          : p
-      )
-    );
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
 
-    setEditingComment(null);
-    setEditCommentText("");
+    try {
+      const response = await fetch(
+        `${FEED_API_URL}/${editingComment.postId}/comment/${editingComment.commentId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ content: editCommentText.trim() }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to update comment");
+      }
+
+      const nextComments = await refreshCommentsForPost(editingComment.postId);
+      if (commentPost?.id === editingComment.postId) {
+        setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+      }
+
+      setEditingComment(null);
+      setEditCommentText("");
+    } catch (error) {
+      console.error("Update Comment Error:", error);
+      alert("Failed to update comment.");
+    }
   };
 
   /* ================= REPLIES ================= */
-  // Recursive function to add reply at any nesting level
-  const addReplyToReplies = (replies, targetId, newReply) => {
-    return replies.map((reply) => {
-      if (reply.id === targetId) {
-        return {
-          ...reply,
-          replies: [...(reply.replies || []), newReply],
-        };
-      }
-      if (reply.replies && reply.replies.length > 0) {
-        return {
-          ...reply,
-          replies: addReplyToReplies(reply.replies, targetId, newReply),
-        };
-      }
-      return reply;
-    });
-  };
-
-  const addReply = (postId, commentId, parentReplyId = null) => {
+  const addReply = async (postId, commentId, parentReplyId = null) => {
     if (!replyText.trim()) return;
 
-    const newReply = {
-      id: Date.now(),
-      user: profileName,
-      text: replyText,
-      createdAt: Date.now(),
-      likes: 0,
-      liked: false,
-      replies: [],
-    };
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please login again.");
+      return;
+    }
 
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) =>
-                c.id === commentId
-                  ? {
-                      ...c,
-                      replies: parentReplyId
-                        ? // Reply to a reply (unlimited nesting)
-                          addReplyToReplies(c.replies || [], parentReplyId, newReply)
-                        : // Reply to comment
-                          [...(c.replies || []), newReply],
-                    }
-                  : c
-              ),
-            }
-          : p
-      )
-    );
+    try {
+      const targetParentId = parentReplyId || commentId;
 
-    setReplyText("");
-    setReplyingTo(null);
-  };
-
-  // Recursive function to toggle like at any nesting level
-  const toggleLikeInReplies = (replies, targetId) => {
-    return replies.map((reply) => {
-      if (reply.id === targetId) {
-        return {
-          ...reply,
-          liked: !reply.liked,
-          likes: reply.liked ? reply.likes - 1 : reply.likes + 1,
-        };
-      }
-      if (reply.replies && reply.replies.length > 0) {
-        return {
-          ...reply,
-          replies: toggleLikeInReplies(reply.replies, targetId),
-        };
-      }
-      return reply;
-    });
-  };
-
-  const toggleReplyLike = (postId, commentId, replyId) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) =>
-                c.id === commentId
-                  ? {
-                      ...c,
-                      replies: toggleLikeInReplies(c.replies || [], replyId),
-                    }
-                  : c
-              ),
-            }
-          : p
-      )
-    );
-  };
-
-  // Recursive function to delete reply at any nesting level
-  const deleteReplyFromReplies = (replies, targetId) => {
-    return replies
-      .filter((reply) => reply.id !== targetId)
-      .map((reply) => {
-        if (reply.replies && reply.replies.length > 0) {
-          return {
-            ...reply,
-            replies: deleteReplyFromReplies(reply.replies, targetId),
-          };
-        }
-        return reply;
+      const response = await fetch(`${FEED_API_URL}/${postId}/comment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          content: replyText.trim(),
+          parent_comment_id: targetParentId,
+        }),
       });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to add reply");
+      }
+
+      const nextComments = await refreshCommentsForPost(postId);
+      if (commentPost?.id === postId) {
+        setCommentPost((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+      }
+
+      setReplyText("");
+      setReplyingTo(null);
+    } catch (error) {
+      console.error("Add Reply Error:", error);
+      alert("Failed to add reply.");
+    }
   };
 
-  const deleteReply = (postId, commentId, replyId) => {
-    setPosts(
-      posts.map((p) =>
-        p.id === postId
-          ? {
-              ...p,
-              comments: p.comments.map((c) =>
-                c.id === commentId
-                  ? {
-                      ...c,
-                      replies: deleteReplyFromReplies(c.replies || [], replyId),
-                    }
-                  : c
-              ),
-            }
-          : p
-      )
-    );
+  const toggleReplyLike = async (postId, commentId, replyId) => {
+    await toggleCommentLike(postId, replyId);
+  };
+
+  const deleteReply = async (postId, commentId, replyId) => {
+    await deleteComment(postId, replyId);
   };
 
   useEffect(() => {
@@ -805,6 +866,19 @@ export default function Feed({
       setPosts((prev) => prev.filter((item) => Number(item.id) !== Number(post_id)));
     };
 
+    const handleUpdatePost = (incomingPost) => {
+      if (!incomingPost) return;
+
+      const normalized = normalizePost(incomingPost);
+      setPosts((prev) =>
+        prev.map((item) =>
+          Number(item.id) === Number(normalized.id)
+            ? { ...item, text: normalized.text }
+            : item
+        )
+      );
+    };
+
     const handleLikeUpdate = ({ post_id, likes_count }) => {
       setPosts((prev) =>
         prev.map((item) =>
@@ -825,16 +899,33 @@ export default function Feed({
       );
     };
 
+    const handleAvatarUpdate = ({ regimental_no, profile_image_url }) => {
+  setPosts((prev) =>
+    prev.map((post) =>
+      post.regimental_no === regimental_no
+        ? {
+            ...post,
+            avatar: profile_image_url + "?v=" + Date.now(),
+          }
+        : post
+    )
+  );
+};
+
     socket.on("feed:new_post", handleNewPost);
     socket.on("feed:delete_post", handleDeletePost);
+    socket.on("feed:update_post", handleUpdatePost);
     socket.on("feed:like_update", handleLikeUpdate);
     socket.on("feed:comment_update", handleCommentUpdate);
+    socket.on("feed:avatar_update", handleAvatarUpdate);
 
     return () => {
       socket.off("feed:new_post", handleNewPost);
       socket.off("feed:delete_post", handleDeletePost);
+      socket.off("feed:update_post", handleUpdatePost);
       socket.off("feed:like_update", handleLikeUpdate);
       socket.off("feed:comment_update", handleCommentUpdate);
+      socket.off("feed:avatar_update", handleAvatarUpdate);
     };
   }, []);
 
@@ -889,7 +980,7 @@ export default function Feed({
   }, [posts]);
 
   return (
-    <div className="alumni-feed">
+    <div className="cadet-feed">
       {/* ================= EDIT POST MODAL ================= */}
       {editingPost && (
         <div className="edit-modal-overlay" onClick={() => setEditingPost(null)}>
@@ -1214,7 +1305,10 @@ export default function Feed({
           <div className="feed-card" key={p.id} id={`feed-post-${p.id}`}>
             <div className="feed-card-header">
               <div className="feed-user">
-                <img src={p.avatar || profileImage} className="feed-avatar" />
+                <img
+  src={p.avatar || "/default-avatar.png"}
+  className="feed-avatar"
+/>
                 <div>
                   <h3>
                     {p.name} <span className="feed-role">{p.role}</span>
@@ -1313,4 +1407,6 @@ export default function Feed({
     </div>
   );
 }
+
+
 
