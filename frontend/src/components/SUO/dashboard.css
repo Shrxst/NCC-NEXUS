@@ -431,6 +431,24 @@
   width: calc(100vw - var(--s-sidebar-w));
 }
 
+.suo-dashboard .main.chatbot-active {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.suo-dashboard .main.chatbot-active .tricolor-bar,
+.suo-dashboard .main.chatbot-active .cadet-topbar {
+  flex-shrink: 0;
+}
+
+.suo-dashboard .chatbot-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* =======================================================================
    CHAT PANEL
    ======================================================================= */

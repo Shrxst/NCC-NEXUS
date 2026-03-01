@@ -1,57 +1,137 @@
-const { GoogleGenAI } = require("@google/genai");
 require("dotenv").config();
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY
-});
+const CHATBOT_PROVIDER = "gemini";
+const CHATBOT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_API_URL_BASE =
+  process.env.GEMINI_API_URL_BASE || "https://generativelanguage.googleapis.com/v1beta";
+const REQUEST_TIMEOUT_MS = Number(process.env.CHATBOT_TIMEOUT_MS || 25000);
 
-const generateResponse = async (userPrompt) => {
+const buildSystemPrompt = () =>
+  [
+    "You are NCC NEXUS Instructor: disciplined, practical, concise mentor for NCC cadets.",
+    "Always start response with: 'Jai Hind Cadet,'.",
+    "Keep answers factual, clear, and safe.",
+    "Help with NCC training, SSB prep, defence exams, leadership, personality development, and GK.",
+    "Refuse only illegal, dangerous, or disallowed requests.",
+    "For long answers, use short bullet points.",
+  ].join(" ");
+
+const toGeminiPrompt = ({ userPrompt, role, history = [] }) => {
+  const historyText = Array.isArray(history)
+    ? history
+        .slice(-10)
+        .map((item) => `${String(item.sender || "").toUpperCase()}: ${String(item.message || "").trim()}`)
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  return [
+    buildSystemPrompt(),
+    `Cadet Role: ${role || "CADET"}`,
+    historyText ? `Conversation History:\n${historyText}` : "",
+    `User Question: ${String(userPrompt || "").trim()}`,
+    "Assistant Response:",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const strictPrompt = `
-ACT AS: NCC NEXUS Instructor — disciplined, motivating and helpful mentor for NCC cadets.
-
-CONTEXT:
-You are helping a cadet in:
-• NCC training
-• SSB preparation
-• Defence exam preparation
-• General knowledge
-• Personality development
-
-RULES:
-1. START EVERY RESPONSE WITH: "Jai Hind Cadet,".
-2. IF greeting like "hi/hello", reply:
-   "Jai Hind Cadet, I am your NCC NEXUS Assistant. Ask me anything related to NCC, SSB, defence exams, GK, or your preparation."
-3. IF the question is about NCC, answer professionally with bullet points.
-4. IF the question is about GK / exams / current affairs / defence / leadership / motivation, answer clearly and respectfully.
-5. IF the question is casual but appropriate, reply politely while keeping instructor tone.
-6. Only refuse when the topic is illegal, harmful, or inappropriate.
-
-USER QUESTION:
-"${userPrompt}"
-
-YOUR RESPONSE:
-`;
-
-    const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: strictPrompt }]
-        }
-      ]
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
     });
-
-    if (result && result.text) {
-      return result.text;
-    } else {
-      throw new Error("Empty response from AI");
-    }
-  } catch (error) {
-    console.error("Gemini Assistant Error:", error.message);
-    return "Jai Hind Cadet, the communication line is weak (Technical Error). Please try again.";
+  } finally {
+    clearTimeout(timer);
   }
 };
 
-module.exports = { generateResponse };
+const extractErrorMessage = async (response) => {
+  let bodyText = "";
+  try {
+    bodyText = await response.text();
+  } catch (err) {
+    bodyText = "";
+  }
+
+  if (!bodyText) return response.statusText || "Unknown error";
+
+  try {
+    const parsed = JSON.parse(bodyText);
+    if (typeof parsed?.error?.message === "string") return parsed.error.message;
+    if (typeof parsed?.message === "string") return parsed.message;
+  } catch (err) {
+    // Non-JSON payload.
+  }
+
+  return bodyText;
+};
+
+const parseGeminiText = async (response) => {
+  const payload = await response.json();
+  const parts = payload?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return null;
+
+  const text = parts
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .join(" ")
+    .trim();
+
+  return text || null;
+};
+
+const generateResponse = async ({ userPrompt, role, history = [] }) => {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured.");
+  }
+
+  const endpoint =
+    `${GEMINI_API_URL_BASE}/models/${encodeURIComponent(CHATBOT_MODEL)}:generateContent?key=${encodeURIComponent(
+      GEMINI_API_KEY
+    )}`;
+
+  const prompt = toGeminiPrompt({ userPrompt, role, history });
+  let response;
+  try {
+    response = await fetchWithTimeout(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 600,
+        },
+      }),
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Gemini request timed out.");
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response);
+    throw new Error(`Gemini API error: ${message}`);
+  }
+
+  const text = await parseGeminiText(response);
+  if (!text) {
+    throw new Error("Empty response from Gemini.");
+  }
+
+  return text;
+};
+
+module.exports = {
+  CHATBOT_PROVIDER,
+  CHATBOT_MODEL,
+  generateResponse,
+};
