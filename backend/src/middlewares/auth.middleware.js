@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const db = require("../db/knex");
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -15,7 +16,22 @@ const authenticate = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+
+    // 🔥 Fetch college_id for multi-tenant isolation
+    const userRecord = await db("users")
+      .select("college_id")
+      .where({ user_id: decoded.user_id })
+      .first();
+
+    if (!userRecord) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    req.user = {
+      ...decoded,
+      college_id: userRecord.college_id,
+    };
+
     next();
   } catch (err) {
     return res.status(401).json({ message: "Invalid or expired token" });
