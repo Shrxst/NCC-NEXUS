@@ -35,13 +35,14 @@ import { closeSUOSidebar, toggleSUOSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
 import VoiceCommandsModule from "../VoiceCommands/VoiceCommandsModule";
+import CommunityFeed from "../community/CommunityFeed";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
 import { resolveProfileImage } from "../../utils/profileImage";
 
 export default function SUODashboard() {
   const SUO_TAB_STORAGE_KEY = "suo_dashboard_active_tab";
-  const SUO_ALLOWED_TABS = ["profile", "feed", "chatbot", "attendance", "meetings", "quiz", "voice", "chat"];
+  const SUO_ALLOWED_TABS = ["profile", "feed", "chatbot", "attendance", "meetings", "quiz", "voice", "chat", "community"];
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -353,9 +354,9 @@ export default function SUODashboard() {
                 </button>
 
                 <button
-                  className="nav-item"
+                  className={`nav-item ${activeTab === "community" ? "active" : ""}`}
                   onClick={() => {
-                    navigate("/community");
+                    setActiveTab("community");
                     dispatch(closeSUOSidebar());
                   }}
                 >
@@ -434,6 +435,8 @@ export default function SUODashboard() {
             {activeTab === "feed" && (
               <Feed profileImage={profileImage} profileName={profileData.name} mode="feed" />
             )}
+
+            {activeTab === "community" && <CommunityFeed />}
 
             {activeTab === "profile" && (
               <div className="profile-page">

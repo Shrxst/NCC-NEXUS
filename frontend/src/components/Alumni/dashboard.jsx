@@ -23,6 +23,7 @@ import Feed from "./feed";
 import ResetPasswordModal from "./resetPassword";
 import MeetingListPage from "../Meetings/MeetingListPage";
 import MeetingDashboardSection from "../Meetings/MeetingDashboardSection";
+import CommunityFeed from "../community/CommunityFeed";
 import { closeAlumniSidebar, toggleAlumniSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
@@ -31,7 +32,7 @@ import { resolveProfileImage } from "../../utils/profileImage";
 
 export default function AlumniDashboard() {
   const ALUMNI_TAB_STORAGE_KEY = "alumni_dashboard_active_tab";
-  const ALUMNI_ALLOWED_TABS = ["profile", "feed", "meetings", "chat"];
+  const ALUMNI_ALLOWED_TABS = ["profile", "feed", "meetings", "chat", "community"];
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -301,9 +302,9 @@ const startEditBio = () => {
                 </button>
 
                 <button
-                  className="nav-item"
+                  className={`nav-item ${activeTab === "community" ? "active" : ""}`}
                   onClick={() => {
-                    navigate("/community");
+                    setActiveTab("community");
                     dispatch(closeAlumniSidebar());
                   }}
                 >
@@ -364,6 +365,8 @@ const startEditBio = () => {
             {activeTab === "feed" && (
               <Feed profileImage={profileImage || logoImage} profileName={profileData.name} mode="feed" />
             )}
+
+            {activeTab === "community" && <CommunityFeed />}
 
             {activeTab === "profile" && (
               <div className="profile-page">

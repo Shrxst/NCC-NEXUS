@@ -37,14 +37,17 @@
 }
 
 .community-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 18px;
+  display: block;
+  width: 100%;
 }
 
 .community-left-column,
 .community-right-column {
   min-width: 0;
+}
+
+.community-left-column {
+  width: 100%;
 }
 
 .community-hero {

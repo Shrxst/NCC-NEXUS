@@ -34,13 +34,14 @@ import { closeCadetSidebar } from "../../features/ui/uiSlice";
 import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
 import VoiceCommandsModule from "../VoiceCommands/VoiceCommandsModule";
+import CommunityFeed from "../community/CommunityFeed";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
 import { resolveProfileImage } from "../../utils/profileImage";
 
 export default function CadetDashboard() {
   const CADET_TAB_STORAGE_KEY = "cadet_dashboard_active_tab";
-  const CADET_ALLOWED_TABS = ["profile", "feed", "attendance", "meetings", "quiz", "voice", "chatbot", "chat"];
+  const CADET_ALLOWED_TABS = ["profile", "feed", "attendance", "meetings", "quiz", "voice", "chatbot", "chat", "community"];
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -372,9 +373,9 @@ const [isEditingBio, setIsEditingBio] = useState(false);
               </button>
 
               <button
-                className="nav-item"
+                className={`nav-item ${activeTab === "community" ? "active" : ""}`}
                 onClick={() => {
-                  navigate("/community");
+                  setActiveTab("community");
                   setSidebarOpen(false);
                 }}
               >
@@ -459,6 +460,8 @@ const [isEditingBio, setIsEditingBio] = useState(false);
               mode="feed"
             />
           )}
+
+          {activeTab === "community" && <CommunityFeed />}
 
           {activeTab === "attendance" && <CadetAttendance />}
           {activeTab === "quiz" && (

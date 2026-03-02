@@ -5,7 +5,6 @@ import PostCard from "./PostCard";
 import ModerationQueue from "./ModerationQueue";
 import PinnedPost from "./PinnedPost";
 import FilterBar from "./FilterBar";
-import BadgeList from "./BadgeList";
 import { useRole } from "../../context/RoleContext";
 import { COMMUNITY_STORAGE_KEY, COMMUNITY_TAGS, defaultCommunityPosts } from "../../data/communityData";
 import { API_BASE_URL } from "../../api/config";
@@ -26,7 +25,7 @@ function sortPosts(posts, sortBy) {
 }
 
 export default function CommunityFeed() {
-  const { role, canComment, points, badges, level, grantPoints } = useRole();
+  const { role, canComment, grantPoints } = useRole();
   const effectiveRole = String(getStoredRole() || role || "").toLowerCase();
   const canPost = effectiveRole === "ano" || effectiveRole === "suo";
   const canEdit = effectiveRole === "ano" || effectiveRole === "suo";
@@ -320,10 +319,6 @@ export default function CommunityFeed() {
             {!visiblePosts.length ? <p className="community-muted-text">No posts found for selected filters.</p> : null}
           </section>
         </section>
-
-        <aside className="community-right-column">
-          <BadgeList points={points} badges={badges} level={level} />
-        </aside>
       </div>
 
       {showCreateModal ? (

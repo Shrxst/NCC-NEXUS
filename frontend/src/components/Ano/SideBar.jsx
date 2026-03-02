@@ -69,7 +69,7 @@ const Sidebar = ({ isOpen = true, onClose }) => {
           </NavLink>
 
           <NavLink
-            to="/community"
+            to="community"
             className="menu-item"
             onClick={() => (typeof onClose === "function" ? onClose() : undefined)}
           >
