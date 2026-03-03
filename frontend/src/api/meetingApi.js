@@ -154,6 +154,31 @@ export const meetingApi = {
       data: (response.data?.data || []).map(mapParticipantToFrontend),
     };
   },
+
+  requestAdmission: async ({ meetingId }) => {
+    const response = await client.post(`/${meetingId}/request-admission`);
+    return response;
+  },
+
+  admitUser: async ({ meetingId, userId }) => {
+    const response = await client.post(`/${meetingId}/admit`, { user_id: userId });
+    return response;
+  },
+
+  rejectUser: async ({ meetingId, userId }) => {
+    const response = await client.post(`/${meetingId}/reject`, { user_id: userId });
+    return response;
+  },
+
+  getMeetingReport: async (meetingId) => {
+    const response = await client.get(`/${meetingId}/report`);
+    return response;
+  },
+
+  toggleBriefingMode: async ({ meetingId, active }) => {
+    const response = await client.patch(`/${meetingId}/briefing`, { active });
+    return response;
+  },
 };
 
 export default meetingApi;

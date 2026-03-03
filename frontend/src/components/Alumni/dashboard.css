@@ -360,9 +360,7 @@
 .alumni-dashboard .alumni-sidebar-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(26, 35, 126, 0.12);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.15);
   z-index: 9997;
 }
 

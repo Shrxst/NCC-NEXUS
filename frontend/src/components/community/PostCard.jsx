@@ -48,7 +48,8 @@ export default function PostCard({
   const isLong = (post.content || "").length > 220;
 
   return (
-    <article className={`community-post-card ${post.pinned ? "pinned" : ""}`}>
+    <div className={`community-post-pair ${showComments ? "comments-open" : ""}`}>
+      <article className={`community-post-card ${post.pinned ? "pinned" : ""}`}>
       <header className="community-post-head">
         <div className="community-author-meta">
           <div className="community-avatar">
@@ -132,16 +133,16 @@ export default function PostCard({
         </div>
       </footer>
 
-      {showComments ? (
-        <CommentSection
-          post={post}
-          role={role}
-          canComment={canComment}
-          onAddComment={onAddComment}
-          onAddReply={onAddReply}
-        />
-      ) : null}
-    </article>
+      </article>
+
+      <CommentSection
+        post={post}
+        role={role}
+        canComment={canComment}
+        onAddComment={onAddComment}
+        onAddReply={onAddReply}
+      />
+    </div>
   );
 }
 

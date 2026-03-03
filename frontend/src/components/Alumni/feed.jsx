@@ -264,6 +264,7 @@ export default function Feed({
   };
 
   const openComments = async (post) => {
+    if (commentPost?.id === post.id) { setCommentPost(null); return; }
     setCommentPost(post);
 
     try {
@@ -402,20 +403,6 @@ export default function Feed({
       ? posts.filter((p) => p.name === profileName)
       : posts.filter((p) => p.name !== profileName);
 
-  const pinnedAnnouncements = posts
-    .filter((p) => p.name !== profileName)
-    .slice(0, 3);
-
-  const getInitial = (name = "") => {
-    const trimmedName = String(name).trim();
-    return trimmedName ? trimmedName.charAt(0).toUpperCase() : "N";
-  };
-
-  const scrollToPost = (postId) => {
-    const target = document.getElementById(`feed-post-${postId}`);
-    if (!target) return;
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
 
   /* ================= CREATE POST (PROFILE ONLY) ================= */
   const createPost = async () => {
@@ -1005,199 +992,6 @@ export default function Feed({
         </div>
       )}
 
-      {/* ================= COMMENT MODAL ================= */}
-      {commentPost && (
-        <div className="edit-modal-overlay" onClick={() => setCommentPost(null)}>
-          <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="edit-modal-header">
-              <h2>Comments</h2>
-              <div className="comment-header-actions">
-                <select
-                  className="comment-sort-select"
-                  value={commentSort}
-                  onChange={(e) => setCommentSort(e.target.value)}
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                </select>
-                <button className="edit-close-btn" onClick={() => setCommentPost(null)}>
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="comment-popup-list">
-              {getSortedComments(commentPost.comments)
-                .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
-                .map((c) => (
-                <div key={c.id} className={`comment-item-popup ${c.pinned ? "pinned-comment" : ""}`}>
-                  <div className="comment-header-row">
-                    <div className="comment-user-info">
-                      <b>{c.user}</b>
-                      {c.pinned && <Pin size={12} className="pinned-icon" />}
-                    </div>
-                    <span className="comment-time">{formatTime(c.createdAt)}</span>
-                  </div>
-                  
-                  {editingComment?.postId === commentPost.id && editingComment?.commentId === c.id ? (
-                    <div className="comment-edit-mode">
-                      <textarea
-                        className="comment-edit-textarea"
-                        value={editCommentText}
-                        onChange={(e) => setEditCommentText(e.target.value)}
-                      />
-                      <div className="comment-edit-actions">
-                        <button className="comment-save-btn" onClick={saveEditComment}>
-                          Save
-                        </button>
-                        <button className="comment-cancel-btn" onClick={() => {
-                          setEditingComment(null);
-                          setEditCommentText("");
-                        }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p>{formatTextWithMentions(c.text)}</p>
-                  )}
-
-                  <div className="comment-actions">
-                    <span 
-                      className="comment-action-btn"
-                      onClick={() => toggleCommentLike(commentPost.id, c.id)}
-                    >
-                      <Heart size={14} fill={c.liked ? "red" : "none"} /> {c.likes}
-                    </span>
-
-                    <span 
-                      className="comment-action-btn"
-                      onClick={() => setReplyingTo(replyingTo?.commentId === c.id ? null : { postId: commentPost.id, commentId: c.id })}
-                    >
-                      <Reply size={14} /> Reply
-                    </span>
-
-                    {c.user === profileName && (
-                      <>
-                        <span
-                          className="comment-action-btn"
-                          onClick={() => editComment(commentPost.id, c.id)}
-                        >
-                          <Edit2 size={14} /> Edit
-                        </span>
-                        <span
-                          className="comment-delete"
-                          onClick={() => deleteComment(commentPost.id, c.id)}
-                        >
-                          Delete
-                        </span>
-                      </>
-                    )}
-
-                    {commentPost.name === profileName && (
-                      <span
-                        className="comment-action-btn"
-                        onClick={() => pinComment(commentPost.id, c.id)}
-                        title={c.pinned ? "Unpin comment" : "Pin comment"}
-                      >
-                        <Pin size={14} fill={c.pinned ? "#a6c34e" : "none"} />
-                      </span>
-                    )}
-
-                    {c.user !== profileName && (
-                      <span
-                        className="comment-action-btn"
-                        onClick={() => reportComment(commentPost.id, c.id)}
-                        title="Report comment"
-                      >
-                        <Flag size={14} />
-                      </span>
-                    )}
-                  </div>
-
-                  {/* View Replies Count */}
-                  {c.replies && c.replies.length > 0 && (
-                    <div className="view-replies-section">
-                      <button
-                        className="view-replies-btn"
-                        onClick={() => toggleReplies(c.id)}
-                      >
-                        {expandedReplies[c.id] ? (
-                          <>
-                            <ChevronUp size={14} /> Hide {getAllNestedRepliesCount(c.replies)} replies
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown size={14} /> View {getAllNestedRepliesCount(c.replies)} replies
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Nested Replies - Unlimited Nesting */}
-                  {c.replies && c.replies.length > 0 && expandedReplies[c.id] && (
-                    <div className="replies-container">
-                      {c.replies.map((reply) => (
-                        <ReplyItem
-                          key={reply.id}
-                          reply={reply}
-                          postId={commentPost.id}
-                          commentId={c.id}
-                          profileName={profileName}
-                          formatTime={formatTime}
-                          toggleReplyLike={toggleReplyLike}
-                          deleteReply={deleteReply}
-                          setReplyingTo={setReplyingTo}
-                          replyingTo={replyingTo}
-                          replyText={replyText}
-                          setReplyText={setReplyText}
-                          addReply={addReply}
-                          depth={0}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Reply Input for Comment */}
-                  {replyingTo?.commentId === c.id && !replyingTo?.replyId && (
-                    <div className="reply-input-container">
-                      <textarea
-                        className="reply-textarea"
-                        placeholder={`Reply to ${c.user}...`}
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                      />
-                      <div className="reply-actions">
-                        <button className="reply-send-btn" onClick={() => addReply(commentPost.id, c.id)}>
-                          Reply
-                        </button>
-                        <button className="reply-cancel-btn" onClick={() => {
-                          setReplyingTo(null);
-                          setReplyText("");
-                        }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <textarea
-              className="edit-textarea"
-              placeholder="Write a comment..."
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-            />
-
-            <button className="edit-save-btn" onClick={addComment}>
-              Add Comment
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ================= FEED ================= */}
       <div className="feed-wrapper">
@@ -1302,7 +1096,8 @@ export default function Feed({
 
         {/* ===== POSTS ===== */}
         {visiblePosts.map((p) => (
-          <div className="feed-card" key={p.id} id={`feed-post-${p.id}`}>
+          <div className={`feed-card${commentPost?.id === p.id ? " feed-card-expanded" : ""}`} key={p.id} id={`feed-post-${p.id}`}>
+            <div className="feed-card-content">
             <div className="feed-card-header">
               <div className="feed-user">
                 <img
@@ -1376,33 +1171,119 @@ export default function Feed({
                 </span>
               </button>
             </div>
+            </div>{/* end feed-card-content */}
+
+            {commentPost?.id === p.id && (
+              <div className="feed-comment-panel">
+                <div className="comment-panel-header">
+                  <h3>Comments</h3>
+                  <div className="comment-panel-actions">
+                    <select
+                      className="comment-sort-select"
+                      value={commentSort}
+                      onChange={(e) => setCommentSort(e.target.value)}
+                    >
+                      <option value="newest">Newest First</option>
+                      <option value="oldest">Oldest First</option>
+                    </select>
+                    <button className="comment-panel-close" onClick={() => setCommentPost(null)}>
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="comment-panel-list">
+                  {getSortedComments(p.comments)
+                    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+                    .map((c) => (
+                    <div key={c.id} className={`comment-item-popup ${c.pinned ? "pinned-comment" : ""}`}>
+                      <div className="comment-header-row">
+                        <div className="comment-user-info">
+                          <b>{c.user}</b>
+                          {c.pinned && <Pin size={12} className="pinned-icon" />}
+                        </div>
+                        <span className="comment-time">{formatTime(c.createdAt)}</span>
+                      </div>
+
+                      {editingComment?.postId === p.id && editingComment?.commentId === c.id ? (
+                        <div className="comment-edit-mode">
+                          <textarea
+                            className="comment-edit-textarea"
+                            value={editCommentText}
+                            onChange={(e) => setEditCommentText(e.target.value)}
+                          />
+                          <div className="comment-edit-actions">
+                            <button className="comment-save-btn" onClick={saveEditComment}>Save</button>
+                            <button className="comment-cancel-btn" onClick={() => { setEditingComment(null); setEditCommentText(""); }}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p>{formatTextWithMentions(c.text)}</p>
+                      )}
+
+                      <div className="comment-actions">
+                        <span className="comment-action-btn" onClick={() => toggleCommentLike(p.id, c.id)}>
+                          <Heart size={14} fill={c.liked ? "red" : "none"} /> {c.likes}
+                        </span>
+                        <span className="comment-action-btn" onClick={() => setReplyingTo(replyingTo?.commentId === c.id ? null : { postId: p.id, commentId: c.id })}>
+                          <Reply size={14} /> Reply
+                        </span>
+                        {c.user === profileName && (
+                          <>
+                            <span className="comment-action-btn" onClick={() => editComment(p.id, c.id)}><Edit2 size={14} /> Edit</span>
+                            <span className="comment-delete" onClick={() => deleteComment(p.id, c.id)}>Delete</span>
+                          </>
+                        )}
+                        {p.name === profileName && (
+                          <span className="comment-action-btn" onClick={() => pinComment(p.id, c.id)} title={c.pinned ? "Unpin comment" : "Pin comment"}>
+                            <Pin size={14} fill={c.pinned ? "#a6c34e" : "none"} />
+                          </span>
+                        )}
+                        {c.user !== profileName && (
+                          <span className="comment-action-btn" onClick={() => reportComment(p.id, c.id)} title="Report comment">
+                            <Flag size={14} />
+                          </span>
+                        )}
+                      </div>
+
+                      {c.replies && c.replies.length > 0 && (
+                        <div className="view-replies-section">
+                          <button className="view-replies-btn" onClick={() => toggleReplies(c.id)}>
+                            {expandedReplies[c.id] ? (<><ChevronUp size={14} /> Hide {getAllNestedRepliesCount(c.replies)} replies</>) : (<><ChevronDown size={14} /> View {getAllNestedRepliesCount(c.replies)} replies</>)}
+                          </button>
+                        </div>
+                      )}
+
+                      {c.replies && c.replies.length > 0 && expandedReplies[c.id] && (
+                        <div className="replies-container">
+                          {c.replies.map((reply) => (
+                            <ReplyItem key={reply.id} reply={reply} postId={p.id} commentId={c.id} profileName={profileName} formatTime={formatTime} toggleReplyLike={toggleReplyLike} deleteReply={deleteReply} setReplyingTo={setReplyingTo} replyingTo={replyingTo} replyText={replyText} setReplyText={setReplyText} addReply={addReply} depth={0} />
+                          ))}
+                        </div>
+                      )}
+
+                      {replyingTo?.commentId === c.id && !replyingTo?.replyId && (
+                        <div className="reply-input-container">
+                          <textarea className="reply-textarea" placeholder={`Reply to ${c.user}...`} value={replyText} onChange={(e) => setReplyText(e.target.value)} />
+                          <div className="reply-actions">
+                            <button className="reply-send-btn" onClick={() => addReply(p.id, c.id)}>Reply</button>
+                            <button className="reply-cancel-btn" onClick={() => { setReplyingTo(null); setReplyText(""); }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="comment-panel-input">
+                  <textarea className="comment-panel-textarea" placeholder="Write a comment..." value={commentText} onChange={(e) => setCommentText(e.target.value)} />
+                  <button className="comment-panel-send" onClick={addComment}>Post</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
-        <aside className="feed-side-panel">
-          <h3 className="feed-side-title">Pinned Announcements</h3>
-          {pinnedAnnouncements.length === 0 ? (
-            <p className="feed-side-empty">No announcements yet.</p>
-          ) : (
-            pinnedAnnouncements.map((announcement) => (
-              <div className="feed-side-item" key={`pinned-${announcement.id}`}>
-                <div className="feed-side-head">
-                  <div className="feed-side-avatar">{getInitial(announcement.name)}</div>
-                  <div className="feed-side-author">{announcement.name}</div>
-                  <span className="feed-side-tag">Pinned</span>
-                </div>
-                <p className="feed-side-text">{announcement.text || "Shared an update."}</p>
-                <button
-                  type="button"
-                  className="feed-side-link"
-                  onClick={() => scrollToPost(announcement.id)}
-                >
-                  View post ›
-                </button>
-              </div>
-            ))
-          )}
-        </aside>
       </div>
     </div>
   );

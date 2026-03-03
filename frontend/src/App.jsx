@@ -33,6 +33,7 @@ import MeetingListPage from "./components/Meetings/MeetingListPage";
 import MeetingCreatePage from "./components/Meetings/MeetingCreatePage";
 import MeetingDetailsPage from "./components/Meetings/MeetingDetailsPage";
 import MeetingRoomPage from "./components/Meetings/MeetingRoomPage";
+import PostMeetingReport from "./components/Meetings/PostMeetingReport";
 import QuizModule from "./components/quiz/QuizModule";
 import QuizLayout from "./components/quiz/QuizLayout";
 import Community from "./pages/Community";
@@ -68,6 +69,7 @@ const App = () => {
         <Route path="/meetings/create" element={<MeetingCreatePage />} />
         <Route path="/meetings/:meetingId" element={<MeetingDetailsPage />} />
         <Route path="/meetings/:meetingId/room" element={<MeetingRoomPage />} />
+        <Route path="/meetings/:meetingId/report" element={<PostMeetingReport />} />
         <Route path="/community" element={<Community />} />
 
         <Route
@@ -91,6 +93,7 @@ const App = () => {
           <Route path="meetings/create" element={<MeetingCreatePage basePath="/ano/meetings" />} />
           <Route path="meetings/:meetingId" element={<MeetingDetailsPage basePath="/ano/meetings" />} />
           <Route path="meetings/:meetingId/room" element={<MeetingRoomPage basePath="/ano/meetings" />} />
+          <Route path="meetings/:meetingId/report" element={<PostMeetingReport basePath="/ano/meetings" />} />
         </Route>
       </Routes>
     </BrowserRouter>

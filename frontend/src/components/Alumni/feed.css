@@ -1,8 +1,9 @@
 ﻿/* ================= NCC NEXUS Ã¢â‚¬â€ ALUMNI FEED (Premium Light) ================= */
 
 .alumni-feed .feed-wrapper {
-  width: 100%;
-  padding: 28px 32px;
+  width: min(555px, 100%);
+  margin: 0 auto;
+  padding: 32px 16px;
 }
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬ Header Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -217,14 +218,19 @@
 
 .alumni-feed .feed-media-image {
   width: 100%;
-  border-radius: 12px;
+  max-height: 555px;
+  object-fit: cover;
+  border-radius: 10px;
   margin-top: 14px;
+  background: #e9ecf5;
 }
 
 .alumni-feed .feed-media-video {
   width: 100%;
-  border-radius: 12px;
+  max-height: 555px;
+  border-radius: 10px;
   margin-top: 14px;
+  background: #e9ecf5;
 }
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬ Post Stats Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -767,118 +773,140 @@
   }
 }
 
-/* ================= FEED SPLIT LAYOUT ================= */
-.alumni-feed .feed-wrapper {
-  width: min(1240px, 100%);
-  margin: 0 auto;
+/* ================= INLINE COMMENT PANEL ================= */
+.alumni-feed .feed-card-expanded {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  column-gap: 28px;
-  align-items: start;
+  grid-template-columns: 1fr 360px;
+  overflow: hidden;
+  width: calc(100% + 360px);
+  margin-right: -360px;
 }
 
-.alumni-feed .feed-wrapper > :not(.feed-side-panel) {
-  grid-column: 1;
+.alumni-feed .feed-card-content {
+  min-width: 0;
 }
 
-.alumni-feed .feed-side-panel {
-  grid-column: 2;
-  grid-row: 1 / span 100;
-  position: sticky;
-  top: 24px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
+.alumni-feed .feed-comment-panel {
+  border-left: 1px solid var(--al-border, rgba(0, 0, 0, 0.06));
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+  background: var(--al-bg, #f0f2f8);
 }
 
-.alumni-feed .feed-side-title {
-  margin: 0 0 14px;
-  font-size: 20px;
+.alumni-feed .comment-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--al-border, rgba(0, 0, 0, 0.06));
+  background: var(--al-surface, #ffffff);
+  flex-shrink: 0;
+}
+
+.alumni-feed .comment-panel-header h3 {
+  margin: 0;
+  font-size: 15px;
   font-weight: 700;
   color: var(--al-text, #1a1d2e);
 }
 
-.alumni-feed .feed-side-item {
-  padding: 14px 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.alumni-feed .feed-side-item:first-of-type {
-  border-top: none;
-  padding-top: 4px;
-}
-
-.alumni-feed .feed-side-head {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  gap: 10px;
+.alumni-feed .comment-panel-actions {
+  display: flex;
   align-items: center;
+  gap: 8px;
 }
 
-.alumni-feed .feed-side-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  background: #ece5ff;
-  color: #7a3ef0;
-  font-weight: 700;
+.alumni-feed .comment-panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--al-text-muted, #6b7194);
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
 }
 
-.alumni-feed .feed-side-author {
-  font-size: 18px;
-  font-weight: 600;
+.alumni-feed .comment-panel-close:hover {
+  background: rgba(0, 0, 0, 0.08);
   color: var(--al-text, #1a1d2e);
 }
 
-.alumni-feed .feed-side-tag {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #ece5ff;
-  color: #7a3ef0;
+.alumni-feed .comment-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.alumni-feed .comment-panel-list::-webkit-scrollbar { width: 4px; }
+.alumni-feed .comment-panel-list::-webkit-scrollbar-thumb {
+  background: rgba(92, 107, 192, 0.2);
+  border-radius: 10px;
+}
+
+.alumni-feed .comment-panel-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--al-border, rgba(0, 0, 0, 0.06));
+  background: var(--al-surface, #ffffff);
+  flex-shrink: 0;
+}
+
+.alumni-feed .comment-panel-textarea {
+  flex: 1;
+  min-height: 36px;
+  max-height: 80px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--al-border, rgba(0, 0, 0, 0.06));
+  border-radius: 10px;
   font-size: 13px;
+  font-family: inherit;
+  color: var(--al-text, #1a1d2e);
+  background: var(--al-bg, #f0f2f8);
+  resize: none;
+  transition: border-color 0.2s;
 }
 
-.alumni-feed .feed-side-text {
-  margin: 12px 0 8px;
-  font-size: 17px;
-  line-height: 1.45;
-  color: var(--al-text-muted, #6b7194);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.alumni-feed .comment-panel-textarea:focus {
+  outline: none;
+  border-color: var(--al-primary, #5C6BC0);
 }
 
-.alumni-feed .feed-side-link {
+.alumni-feed .comment-panel-send {
+  height: 36px;
+  padding: 0 16px;
   border: none;
-  background: transparent;
-  color: #6d28d9;
-  font-size: 17px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--al-primary, #5C6BC0), var(--al-navy, #1A237E));
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  padding: 0;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
 
-.alumni-feed .feed-side-empty {
-  color: var(--al-text-muted, #6b7194);
-  font-size: 14px;
-  margin: 6px 0 0;
+.alumni-feed .comment-panel-send:hover {
+  box-shadow: 0 4px 14px rgba(92, 107, 192, 0.3);
 }
 
-@media (max-width: 1024px) {
-  .alumni-feed .feed-wrapper {
+@media (max-width: 768px) {
+  .alumni-feed .feed-card-expanded {
     grid-template-columns: 1fr;
+    width: 100%;
+    margin-right: 0;
   }
-
-  .alumni-feed .feed-side-panel {
-    grid-column: 1;
-    grid-row: auto;
-    position: static;
-    margin-bottom: 20px;
+  .alumni-feed .feed-comment-panel {
+    border-left: none;
+    border-top: 1px solid var(--al-border, rgba(0, 0, 0, 0.06));
+    max-height: 360px;
   }
 }
 
@@ -929,26 +957,3 @@
 }
 
 
-/* ================= MEDIA HARDENING ================= */
-..alumni-feed .feed-media-image,
-..alumni-feed .feed-media-video,
-..alumni-feed .feed-preview-media {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 420px;
-  object-fit: cover;
-  border-radius: 12px;
-  display: block;
-  background: #e9ecf5;
-}
-
-..alumni-feed .feed-preview-wrap {
-  overflow: hidden;
-}
-
-..alumni-feed .feed-preview-label {
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}

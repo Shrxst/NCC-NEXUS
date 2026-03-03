@@ -1,82 +1,230 @@
-import { createSlice } from "@reduxjs/toolkit";
-import { MEETING_STATUS } from "../components/Meetings/meetingUtils";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { meetingApi } from "../api/meetingApi";
 
-const mockUsers = [
-  { id: 101, name: "Lt. Meera Nair", role: "ANO" },
-  { id: 102, name: "SUO Arjun Rana", role: "SUO" },
-  { id: 103, name: "Cadet Priya Singh", role: "CADET" },
-  { id: 104, name: "Cadet Rohan Das", role: "CADET" },
-  { id: 105, name: "Alumni Kavya Menon", role: "ALUMNI" },
-  { id: 106, name: "Cadet Imran Khan", role: "CADET" },
-  { id: 107, name: "SUO Neha Bist", role: "SUO" },
-  { id: 108, name: "Alumni Aditya Rao", role: "ALUMNI" },
-];
+// ── LocalStorage fallback helpers ──
+// Used when the backend is not yet available
 
-const initialMeetings = [
-  {
-    id: "M-1001",
-    title: "Weekly Training Brief",
-    description: "Agenda briefing and drill preparation for the upcoming parade.",
-    dateTime: "2026-02-22T10:00:00",
-    meetingType: "Training",
-    restricted: true,
-    invitedUserIds: [102, 103, 104, 106],
-    createdBy: 101,
-    status: MEETING_STATUS.SCHEDULED,
-  },
-  {
-    id: "M-1002",
-    title: "Live Unit Coordination",
-    description: "Ongoing coordination call for event logistics.",
-    dateTime: "2026-02-21T09:30:00",
-    meetingType: "General",
-    restricted: false,
-    invitedUserIds: [101, 102, 103, 104, 105, 106, 107, 108],
-    createdBy: 102,
-    status: MEETING_STATUS.LIVE,
-  },
-  {
-    id: "M-1003",
-    title: "Annual Briefing Review",
-    description: "Post-event debrief and archive review.",
-    dateTime: "2026-02-12T15:00:00",
-    meetingType: "Briefing",
-    restricted: true,
-    invitedUserIds: [101, 102, 105, 108],
-    createdBy: 101,
-    status: MEETING_STATUS.ENDED,
-  },
-];
+const STORAGE_KEY = "ncc_meetings";
+const PARTICIPANTS_KEY = "ncc_meeting_participants";
 
-const initialParticipants = {
-  "M-1001": [{ userId: 101, micOn: true, cameraOn: true }],
-  "M-1002": [
-    { userId: 102, micOn: true, cameraOn: true },
-    { userId: 103, micOn: true, cameraOn: false },
-    { userId: 104, micOn: false, cameraOn: true },
-    { userId: 105, micOn: true, cameraOn: true },
-  ],
-  "M-1003": [{ userId: 101, micOn: true, cameraOn: true }],
+const loadMeetings = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 };
 
+const saveMeetings = (meetings) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings));
+  } catch {
+    // storage full or unavailable — ignore
+  }
+};
+
+const loadParticipants = () => {
+  try {
+    const raw = localStorage.getItem(PARTICIPANTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveParticipants = (participants) => {
+  try {
+    localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(participants));
+  } catch {
+    // ignore
+  }
+};
+
+const generateId = () => `mtg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+// ── Async Thunks — try API first, fall back to localStorage ──
+
+export const fetchMeetings = createAsyncThunk(
+  "meetings/fetchMeetings",
+  async () => {
+    try {
+      const response = await meetingApi.listMeetings();
+      return { source: "api", meetings: response.data };
+    } catch {
+      return { source: "local", meetings: loadMeetings() };
+    }
+  }
+);
+
+export const fetchMeetingById = createAsyncThunk(
+  "meetings/fetchMeetingById",
+  async (meetingId) => {
+    try {
+      const response = await meetingApi.getMeetingById(meetingId);
+      return { source: "api", meeting: response.data };
+    } catch {
+      const all = loadMeetings();
+      const found = all.find((m) => m.id === String(meetingId));
+      return { source: "local", meeting: found || null };
+    }
+  }
+);
+
+export const createMeetingAsync = createAsyncThunk(
+  "meetings/createMeeting",
+  async (payload) => {
+    try {
+      const response = await meetingApi.createMeeting(payload);
+      return { source: "api", meeting: response.data };
+    } catch {
+      // Fallback: save to localStorage
+      const meeting = {
+        id: generateId(),
+        title: payload.title || "",
+        description: payload.description || "",
+        dateTime: payload.dateTime || null,
+        meetingType: payload.meetingType || "General",
+        invitedUserIds: Array.isArray(payload.invitedUserIds) ? payload.invitedUserIds : [],
+        createdBy: payload.createdBy || payload.invitedUserIds?.[0] || 0,
+        status: "SCHEDULED",
+        restricted: payload.restricted || false,
+        createdAt: new Date().toISOString(),
+      };
+      const all = loadMeetings();
+      all.unshift(meeting);
+      saveMeetings(all);
+      return { source: "local", meeting };
+    }
+  }
+);
+
+export const updateMeetingStatusAsync = createAsyncThunk(
+  "meetings/updateMeetingStatus",
+  async ({ meetingId, status }) => {
+    try {
+      const response = await meetingApi.updateMeetingStatus({ meetingId, status });
+      return { source: "api", meeting: response.data };
+    } catch {
+      // Fallback: update in localStorage
+      const all = loadMeetings();
+      const idx = all.findIndex((m) => m.id === String(meetingId));
+      if (idx >= 0) {
+        all[idx] = { ...all[idx], status };
+        if (status === "LIVE") all[idx].startedAt = new Date().toISOString();
+        if (status === "ENDED") all[idx].endedAt = new Date().toISOString();
+        saveMeetings(all);
+        return { source: "local", meeting: all[idx] };
+      }
+      return { source: "local", meeting: { id: meetingId, status } };
+    }
+  }
+);
+
+export const joinMeetingAsync = createAsyncThunk(
+  "meetings/joinMeeting",
+  async ({ meetingId, userId }) => {
+    try {
+      const response = await meetingApi.joinMeeting({ meetingId });
+      return { source: "api", meetingId, participant: response.data };
+    } catch {
+      const allP = loadParticipants();
+      const list = allP[meetingId] || [];
+      const exists = list.some((p) => Number(p.userId) === Number(userId));
+      if (!exists) {
+        list.push({ userId: Number(userId), joinedAt: new Date().toISOString(), micOn: true, cameraOn: true });
+      }
+      allP[meetingId] = list;
+      saveParticipants(allP);
+      return { source: "local", meetingId, participant: { userId: Number(userId), joinedAt: new Date().toISOString() } };
+    }
+  }
+);
+
+export const leaveMeetingAsync = createAsyncThunk(
+  "meetings/leaveMeeting",
+  async ({ meetingId, userId }) => {
+    try {
+      await meetingApi.leaveMeeting({ meetingId });
+      return { source: "api", meetingId, participant: { userId: Number(userId) } };
+    } catch {
+      const allP = loadParticipants();
+      allP[meetingId] = (allP[meetingId] || []).filter((p) => Number(p.userId) !== Number(userId));
+      saveParticipants(allP);
+      return { source: "local", meetingId, participant: { userId: Number(userId) } };
+    }
+  }
+);
+
+export const fetchParticipants = createAsyncThunk(
+  "meetings/fetchParticipants",
+  async (meetingId) => {
+    try {
+      const response = await meetingApi.getParticipants(meetingId);
+      return { source: "api", meetingId, participants: response.data };
+    } catch {
+      const allP = loadParticipants();
+      return { source: "local", meetingId, participants: allP[meetingId] || [] };
+    }
+  }
+);
+
+export const fetchMeetingReport = createAsyncThunk(
+  "meetings/fetchMeetingReport",
+  async (meetingId) => {
+    try {
+      const response = await meetingApi.getMeetingReport(meetingId);
+      const report = response.data?.data || response.data;
+      return { source: "api", meetingId, report };
+    } catch {
+      // Fallback: generate report from localStorage
+      const allP = loadParticipants();
+      const participants = allP[meetingId] || [];
+      const all = loadMeetings();
+      const meeting = all.find((m) => m.id === String(meetingId));
+      const invited = meeting?.invitedUserIds || [];
+      return {
+        source: "local",
+        meetingId,
+        report: {
+          totalInvited: invited.length,
+          totalPresent: participants.length,
+          totalAbsent: Math.max(0, invited.length - participants.length),
+          attendancePercent: invited.length > 0 ? Math.round((participants.length / invited.length) * 100) : 0,
+          participants,
+        },
+      };
+    }
+  }
+);
+
+// ── Slice ──
+
 const initialState = {
-  users: mockUsers,
-  meetings: initialMeetings,
+  meetings: loadMeetings(),
   currentMeeting: null,
-  invitedUsers: [],
-  participants: initialParticipants,
+  participants: loadParticipants(),
+  reports: {},
   isHost: false,
   meetingStatus: "IDLE",
   connectionStatus: "DISCONNECTED",
+  loading: false,
+  error: null,
+  waitingRoom: {},
+  admittedUsers: {},
+  briefingMode: {},
 };
 
 const updateParticipant = (state, meetingId, userId, updater) => {
   const list = state.participants[meetingId] || [];
-  state.participants[meetingId] = list.map((participant) => {
-    if (Number(participant.userId) !== Number(userId)) return participant;
-    return updater(participant);
+  state.participants[meetingId] = list.map((p) => {
+    if (Number(p.userId) !== Number(userId)) return p;
+    return updater(p);
   });
 };
+
+const persistMeetings = (state) => saveMeetings(state.meetings);
+const persistParticipants = (state) => saveParticipants(state.participants);
 
 const meetingsSlice = createSlice({
   name: "meetings",
@@ -84,93 +232,213 @@ const meetingsSlice = createSlice({
   reducers: {
     addMeeting(state, action) {
       const meeting = action.payload;
-      state.meetings.unshift(meeting);
-      state.participants[meeting.id] = [{
-        userId: meeting.createdBy,
-        micOn: true,
-        cameraOn: true,
-      }];
+      const exists = state.meetings.some((m) => m.id === meeting.id);
+      if (!exists) {
+        state.meetings.unshift(meeting);
+        persistMeetings(state);
+      }
     },
     editMeeting(state, action) {
       const { meetingId, updates } = action.payload;
-      state.meetings = state.meetings.map((meeting) =>
-        meeting.id === meetingId ? { ...meeting, ...updates } : meeting
+      state.meetings = state.meetings.map((m) =>
+        m.id === meetingId ? { ...m, ...updates } : m
       );
       if (state.currentMeeting?.id === meetingId) {
         state.currentMeeting = { ...state.currentMeeting, ...updates };
       }
+      persistMeetings(state);
     },
-    setInvitedUsers(state, action) {
-      state.invitedUsers = action.payload || [];
+    deleteMeeting(state, action) {
+      const { meetingId } = action.payload;
+      state.meetings = state.meetings.filter((m) => m.id !== meetingId);
+      delete state.participants[meetingId];
+      delete state.waitingRoom[meetingId];
+      delete state.admittedUsers[meetingId];
+      delete state.briefingMode[meetingId];
+      persistMeetings(state);
+      persistParticipants(state);
     },
     setCurrentMeeting(state, action) {
       const { meetingId, userId } = action.payload || {};
-      const found = state.meetings.find((meeting) => meeting.id === meetingId) || null;
+      const found = state.meetings.find((m) => m.id === meetingId) || null;
       state.currentMeeting = found;
       state.isHost = Boolean(found && Number(found.createdBy) === Number(userId));
       state.meetingStatus = found ? found.status : "IDLE";
     },
     updateMeetingStatus(state, action) {
       const { meetingId, status } = action.payload;
-      state.meetings = state.meetings.map((meeting) =>
-        meeting.id === meetingId ? { ...meeting, status } : meeting
+      state.meetings = state.meetings.map((m) =>
+        m.id === meetingId ? { ...m, status } : m
       );
       if (state.currentMeeting?.id === meetingId) {
         state.currentMeeting = { ...state.currentMeeting, status };
       }
       state.meetingStatus = status;
+      persistMeetings(state);
     },
     joinMeeting(state, action) {
       const { meetingId, userId } = action.payload;
       const list = state.participants[meetingId] || [];
-      const exists = list.some((participant) => Number(participant.userId) === Number(userId));
+      const exists = list.some((p) => Number(p.userId) === Number(userId));
       if (!exists) {
-        list.push({ userId, micOn: true, cameraOn: true });
+        list.push({ userId, micOn: true, cameraOn: true, joinedAt: new Date().toISOString() });
       }
       state.participants[meetingId] = list;
       state.connectionStatus = "CONNECTED";
+      persistParticipants(state);
     },
     leaveMeeting(state, action) {
       const { meetingId, userId } = action.payload;
       state.participants[meetingId] = (state.participants[meetingId] || []).filter(
-        (participant) => Number(participant.userId) !== Number(userId)
+        (p) => Number(p.userId) !== Number(userId)
       );
       state.connectionStatus = "DISCONNECTED";
+      persistParticipants(state);
     },
     toggleMic(state, action) {
       const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (participant) => ({
-        ...participant,
-        micOn: !participant.micOn,
-      }));
+      updateParticipant(state, meetingId, userId, (p) => ({ ...p, micOn: !p.micOn }));
     },
     toggleCamera(state, action) {
       const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (participant) => ({
-        ...participant,
-        cameraOn: !participant.cameraOn,
-      }));
+      updateParticipant(state, meetingId, userId, (p) => ({ ...p, cameraOn: !p.cameraOn }));
     },
     muteParticipant(state, action) {
       const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (participant) => ({ ...participant, micOn: false }));
+      updateParticipant(state, meetingId, userId, (p) => ({ ...p, micOn: false }));
     },
     removeParticipant(state, action) {
       const { meetingId, userId } = action.payload;
       state.participants[meetingId] = (state.participants[meetingId] || []).filter(
-        (participant) => Number(participant.userId) !== Number(userId)
+        (p) => Number(p.userId) !== Number(userId)
       );
     },
     setConnectionStatus(state, action) {
       state.connectionStatus = action.payload;
     },
+    requestAdmission(state, action) {
+      const { meetingId, userId, name, role } = action.payload;
+      const queue = state.waitingRoom[meetingId] || [];
+      const exists = queue.some((r) => Number(r.userId) === Number(userId));
+      if (!exists) {
+        queue.push({ userId, name, role, requestedAt: new Date().toISOString() });
+      }
+      state.waitingRoom[meetingId] = queue;
+    },
+    admitUser(state, action) {
+      const { meetingId, userId } = action.payload;
+      state.waitingRoom[meetingId] = (state.waitingRoom[meetingId] || []).filter(
+        (r) => Number(r.userId) !== Number(userId)
+      );
+      const admitted = state.admittedUsers[meetingId] || [];
+      if (!admitted.includes(Number(userId))) {
+        admitted.push(Number(userId));
+      }
+      state.admittedUsers[meetingId] = admitted;
+    },
+    rejectUser(state, action) {
+      const { meetingId, userId } = action.payload;
+      state.waitingRoom[meetingId] = (state.waitingRoom[meetingId] || []).filter(
+        (r) => Number(r.userId) !== Number(userId)
+      );
+    },
+    toggleBriefingMode(state, action) {
+      const { meetingId } = action.payload;
+      state.briefingMode[meetingId] = !state.briefingMode[meetingId];
+    },
+  },
+  extraReducers: (builder) => {
+    // fetchMeetings
+    builder.addCase(fetchMeetings.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(fetchMeetings.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetings, source } = action.payload;
+      state.meetings = meetings;
+      if (source === "api") persistMeetings(state);
+    });
+    builder.addCase(fetchMeetings.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload;
+    });
+
+    // fetchMeetingById
+    builder.addCase(fetchMeetingById.fulfilled, (state, action) => {
+      const { meeting, source } = action.payload;
+      if (!meeting) return;
+      const idx = state.meetings.findIndex((m) => m.id === meeting.id);
+      if (idx >= 0) {
+        state.meetings[idx] = meeting;
+      } else {
+        state.meetings.push(meeting);
+      }
+      if (source === "api") persistMeetings(state);
+    });
+
+    // createMeetingAsync
+    builder.addCase(createMeetingAsync.fulfilled, (state, action) => {
+      const { meeting, source } = action.payload;
+      const exists = state.meetings.some((m) => m.id === meeting.id);
+      if (!exists) {
+        state.meetings.unshift(meeting);
+      }
+      if (source === "api") persistMeetings(state);
+    });
+
+    // updateMeetingStatusAsync
+    builder.addCase(updateMeetingStatusAsync.fulfilled, (state, action) => {
+      const { meeting } = action.payload;
+      state.meetings = state.meetings.map((m) =>
+        m.id === meeting.id ? meeting : m
+      );
+      if (state.currentMeeting?.id === meeting.id) {
+        state.currentMeeting = meeting;
+      }
+      state.meetingStatus = meeting.status;
+      persistMeetings(state);
+    });
+
+    // joinMeetingAsync
+    builder.addCase(joinMeetingAsync.fulfilled, (state, action) => {
+      const { meetingId, participant } = action.payload;
+      const list = state.participants[meetingId] || [];
+      const exists = list.some((p) => Number(p.userId) === Number(participant.userId));
+      if (!exists) {
+        list.push(participant);
+      }
+      state.participants[meetingId] = list;
+      state.connectionStatus = "CONNECTED";
+    });
+
+    // leaveMeetingAsync
+    builder.addCase(leaveMeetingAsync.fulfilled, (state, action) => {
+      const { meetingId, participant } = action.payload;
+      state.participants[meetingId] = (state.participants[meetingId] || []).filter(
+        (p) => Number(p.userId) !== Number(participant.userId)
+      );
+      state.connectionStatus = "DISCONNECTED";
+    });
+
+    // fetchParticipants
+    builder.addCase(fetchParticipants.fulfilled, (state, action) => {
+      const { meetingId, participants } = action.payload;
+      state.participants[meetingId] = participants;
+    });
+
+    // fetchMeetingReport
+    builder.addCase(fetchMeetingReport.fulfilled, (state, action) => {
+      const { meetingId, report } = action.payload;
+      state.reports[meetingId] = report;
+    });
   },
 });
 
 export const {
   addMeeting,
   editMeeting,
-  setInvitedUsers,
+  deleteMeeting,
   setCurrentMeeting,
   updateMeetingStatus,
   joinMeeting,
@@ -180,6 +448,10 @@ export const {
   muteParticipant,
   removeParticipant,
   setConnectionStatus,
+  requestAdmission,
+  admitUser,
+  rejectUser,
+  toggleBriefingMode,
 } = meetingsSlice.actions;
 
 export default meetingsSlice.reducer;

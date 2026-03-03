@@ -78,7 +78,10 @@ const AnoAttendance = () => {
     }
   };
 
-  const drills = sessionDetail?.drills || [];
+  // Reverse drills so newest appears first; build index map for attendance lookup
+  const rawDrills = sessionDetail?.drills || [];
+  const drillOrder = rawDrills.map((_, i) => i).reverse();
+  const drills = drillOrder.map((i) => rawDrills[i]);
   const cadets = sessionDetail?.cadets || [];
 
   return (
@@ -108,9 +111,9 @@ const AnoAttendance = () => {
           <thead>
             <tr>
               <th className="ano-col-cadet">Cadet Name</th>
-              {drills.map((drill, idx) => (
+              {drills.map((drill, i) => (
                 <th key={drill.drill_id} className="ano-col-drill">
-                  <div className="ano-drill-head">{drill.drill_name || `Drill ${idx + 1}`}</div>
+                  <div className="ano-drill-head">{drill.drill_name || `Drill ${drillOrder[i] + 1}`}</div>
                   <div className="ano-drill-date">{`${drill.drill_date} ${String(drill.drill_time).slice(0, 5)}`}</div>
                 </th>
               ))}
@@ -125,8 +128,8 @@ const AnoAttendance = () => {
               return (
                 <tr key={cadet.regimental_no}>
                   <td className="ano-cadet-name-cell">{cadet.name}</td>
-                  {drills.map((drill, drillIdx) => {
-                    const status = cadet.attendance?.[drillIdx] ?? null;
+                  {drills.map((drill, i) => {
+                    const status = cadet.attendance?.[drillOrder[i]] ?? null;
                     return (
                       <td key={`${cadet.regimental_no}-${drill.drill_id}`}>
                         {status ? (

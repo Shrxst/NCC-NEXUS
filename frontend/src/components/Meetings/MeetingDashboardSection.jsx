@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import MeetingCard from "./MeetingCard";
+import { fetchMeetings } from "../../store/meetingSlice";
 import {
   MEETING_STATUS,
   canCreateMeeting,
@@ -11,10 +13,15 @@ import {
 import "./meetingModule.css";
 
 const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", basePath = "/meetings" }) => {
+  const dispatch = useDispatch();
   const role = getCurrentRole();
   const user = getCurrentUser();
   const meetings = useSelector((state) => state.meetings.meetings);
   const participants = useSelector((state) => state.meetings.participants);
+
+  useEffect(() => {
+    dispatch(fetchMeetings());
+  }, [dispatch]);
 
   const visible = getVisibleMeetings(meetings, role, user.id);
   const liveMeeting = visible.find((meeting) => meeting.status === MEETING_STATUS.LIVE);
@@ -49,7 +56,10 @@ const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", 
 
       {liveMeeting ? (
         <div className="meeting-live-alert">
-          <strong>Live Meeting:</strong> {liveMeeting.title}
+          <div className="meeting-live-alert-content">
+            <span className="meeting-live-dot" />
+            <strong>Live Now:</strong> {liveMeeting.title}
+          </div>
           <Link to={`${basePath}/${liveMeeting.id}/room`}>Join Now</Link>
         </div>
       ) : null}
@@ -65,6 +75,7 @@ const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", 
               participants={participants[meeting.id] || []}
               detailsPath={`${basePath}/${meeting.id}`}
               roomPath={`${basePath}/${meeting.id}/room`}
+              reportPath={`${basePath}/${meeting.id}/report`}
             />
           ))}
         </div>
