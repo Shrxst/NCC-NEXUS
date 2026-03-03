@@ -15,6 +15,7 @@ const anoRoutes = require("./routes/ano.routes");
 const cadetRoutes = require("./routes/cadet.routes");
 const chatRoutes = require("./routes/chat.routes");
 const postRoutes = require("./routes/post.routes");
+const donationRoutes = require("./routes/donation.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const attendanceRoutes = require("./modules/attendance/attendance.routes");
 const quizRoutes = require("./modules/quiz/routes/quiz.routes");
@@ -79,6 +80,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/quiz", quizRoutes);
 app.use("/api/leave", leaveRoutes);
 app.use("/api/meetings", meetingRoutes);
+app.use("/api/donations", donationRoutes);
 // 9. Global Error Handler
 // ------------------------------------------
 app.use((err, req, res, next) => {
