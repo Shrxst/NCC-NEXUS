@@ -48,7 +48,10 @@ const PostMeetingReport = ({ embedded = false, basePath = "/meetings" }) => {
     );
   }
 
-  if (meeting.status !== MEETING_STATUS.ENDED) {
+  if (
+    meeting.status !== MEETING_STATUS.ENDED &&
+    meeting.status !== MEETING_STATUS.COMPLETED
+  ) {
     return (
       <div className={embedded ? "meeting-page meeting-page-embedded" : "meeting-page"}>
         <div className="meeting-empty">Report is available only for completed meetings.</div>

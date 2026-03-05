@@ -4,15 +4,16 @@ import { FaPaperPlane, FaPlus, FaRegImage, FaXmark } from "react-icons/fa6";
 
 const TABS = ["update", "event", "poll", "media"];
 
-const readFileAsDataUrl = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
+const toDateTimeLocalValue = (value) => {
+  if (!value) return "";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+};
 
 export default function CreatePostForm({ onClose, onSubmit, role = "cadet", initialPost = null }) {
+  const initialPoll = initialPost?.pollDetails || null;
   const [tab, setTab] = useState(initialPost?.type || "update");
   const [content, setContent] = useState(initialPost?.content || "");
   const [tagInput, setTagInput] = useState("");
@@ -21,16 +22,21 @@ export default function CreatePostForm({ onClose, onSubmit, role = "cadet", init
     initialPost?.eventDetails || { title: "", date: "", location: "", description: "", eventTag: "Training" }
   );
   const [pollDetails, setPollDetails] = useState(
-    initialPost?.pollDetails || {
-      question: "",
-      options: [
-        { id: "opt-1", text: "", votes: 0, voters: [] },
-        { id: "opt-2", text: "", votes: 0, voters: [] },
-      ],
-      deadline: "",
-      multiple: false,
-      anonymous: false,
-    }
+    initialPoll
+      ? {
+          ...initialPoll,
+          deadline: toDateTimeLocalValue(initialPoll.deadline),
+        }
+      : {
+          question: "",
+          options: [
+            { id: "opt-1", text: "", votes: 0, voters: [] },
+            { id: "opt-2", text: "", votes: 0, voters: [] },
+          ],
+          deadline: "",
+          multiple: false,
+          anonymous: false,
+        }
   );
   const [mediaFiles, setMediaFiles] = useState({ images: [], videos: [], pdfs: [] });
   const [mediaUrlInput, setMediaUrlInput] = useState("");
@@ -57,37 +63,47 @@ export default function CreatePostForm({ onClose, onSubmit, role = "cadet", init
     e.preventDefault();
     const normalizedTags = tags.filter(Boolean);
 
-    const fileImageUrls = await Promise.all(mediaFiles.images.map((file) => readFileAsDataUrl(file)));
-    const videoUrls = await Promise.all(mediaFiles.videos.map((file) => readFileAsDataUrl(file)));
-    const pdfUrls = await Promise.all(
-      mediaFiles.pdfs.map(async (file) => ({
-        name: file.name,
-        url: await readFileAsDataUrl(file),
-      }))
-    );
-
     const eventDateValue = eventDetails.date ? new Date(eventDetails.date) : null;
     const eventDate = eventDateValue && !Number.isNaN(eventDateValue.getTime()) ? eventDateValue.toISOString() : eventDetails.date;
+    const pollDeadlineValue = pollDetails.deadline ? new Date(pollDetails.deadline) : null;
+    const pollDeadline =
+      pollDeadlineValue && !Number.isNaN(pollDeadlineValue.getTime()) ? pollDeadlineValue.toISOString() : "";
 
-    onSubmit({
-      id: initialPost?.id || `post-${Date.now()}`,
-      author: initialPost?.author || role.toUpperCase(),
-      authorRole: initialPost?.authorRole || role,
-      content: content.trim(),
-      type: tab,
-      timestamp: Date.now(),
-      pinned: initialPost?.pinned || false,
-      status: "approved",
-      tags: normalizedTags,
-      eventDetails: tab === "event" ? { ...eventDetails, date: eventDate } : null,
-      pollDetails: tab === "poll" ? pollDetails : null,
-      mediaUrls: tab === "media" ? [...mediaUrlList, ...fileImageUrls] : [],
-      videoUrls: tab === "media" ? videoUrls : [],
-      pdfUrls: tab === "media" ? pdfUrls : [],
-      reactions: initialPost?.reactions || { salute: 0, fire: 0, clap: 0 },
-      comments: initialPost?.comments || [],
-    });
-    onClose();
+    if (tab === "poll") {
+      if (!pollDeadline) {
+        alert("Please select 'Poll active till' date and time.");
+        return;
+      }
+      if (pollDeadlineValue.getTime() <= Date.now()) {
+        alert("Poll active till must be a future date and time.");
+        return;
+      }
+    }
+
+    try {
+      await onSubmit({
+        id: initialPost?.id || `post-${Date.now()}`,
+        author: initialPost?.author || role.toUpperCase(),
+        authorRole: initialPost?.authorRole || role,
+        content: content.trim(),
+        type: tab,
+        timestamp: Date.now(),
+        pinned: initialPost?.pinned || false,
+        status: "approved",
+        tags: normalizedTags,
+        eventDetails: tab === "event" ? { ...eventDetails, date: eventDate } : null,
+        pollDetails: tab === "poll" ? { ...pollDetails, deadline: pollDeadline } : null,
+        mediaUrls: tab === "media" ? mediaUrlList : [],
+        videoUrls: tab === "media" ? [] : [],
+        pdfUrls: tab === "media" ? [] : [],
+        mediaFiles: tab === "media" ? mediaFiles : { images: [], videos: [], pdfs: [] },
+        reactions: initialPost?.reactions || { salute: 0, fire: 0, clap: 0 },
+        comments: initialPost?.comments || [],
+      });
+      onClose();
+    } catch (error) {
+      alert(error?.message || "Failed to create post");
+    }
   };
 
   const modalContent = (
@@ -204,8 +220,10 @@ export default function CreatePostForm({ onClose, onSubmit, role = "cadet", init
               </button>
             ) : null}
             <div className="community-poll-controls-row">
+              <label htmlFor="poll-active-till">Poll active till</label>
               <input
-                type="date"
+                id="poll-active-till"
+                type="datetime-local"
                 required
                 className="community-poll-date-input"
                 value={pollDetails.deadline}

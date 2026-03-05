@@ -32,6 +32,7 @@ export default function PostCard({
   post,
   role,
   canEdit,
+  canDelete,
   canPost,
   canComment,
   onEdit,
@@ -68,16 +69,20 @@ export default function PostCard({
               </div>
             </div>
           </div>
-          {canEdit ? (
+          {canEdit || canDelete ? (
             <div className="community-post-tools community-post-tools-left">
-              <button type="button" onClick={() => onEdit(post)}>
-                <FaPen size={12} />
-                Edit
-              </button>
-              <button type="button" onClick={() => onDelete(post.id)}>
-                <FaTrashCan size={12} />
-                Delete
-              </button>
+              {canEdit ? (
+                <button type="button" onClick={() => onEdit(post)}>
+                  <FaPen size={12} />
+                  Edit
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button type="button" onClick={() => onDelete(post.id)}>
+                  <FaTrashCan size={12} />
+                  Delete
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

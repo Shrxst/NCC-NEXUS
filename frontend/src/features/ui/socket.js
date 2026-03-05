@@ -4,6 +4,8 @@ import { chatApiBaseUrl } from "./chatApi";
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || chatApiBaseUrl;
 
 let socket = null;
+const normalizeMeetingId = (meetingId) =>
+  Number(String(meetingId ?? "").trim().replace(/^:/, ""));
 
 function getSocket() {
   return socket;
@@ -31,6 +33,10 @@ function connectChatSocket(token) {
   });
 
   return socket;
+}
+
+function connectSocket(token) {
+  return connectChatSocket(token);
 }
 
 function disconnectChatSocket() {
@@ -112,8 +118,84 @@ function emitRead({ roomId, upToMessageId = null }) {
   });
 }
 
+// -----------------------------
+// MEETING SOCKET HELPERS
+// -----------------------------
+
+function joinMeetingRoom(meetingId) {
+  if (!socket) {
+    const token = localStorage.getItem("token");
+    if (token) connectChatSocket(token);
+  }
+  const normalizedMeetingId = normalizeMeetingId(meetingId);
+  if (!socket || !Number.isInteger(normalizedMeetingId) || normalizedMeetingId <= 0) return;
+  socket.emit("meeting:joinRoom", { meetingId: normalizedMeetingId });
+}
+
+function leaveMeetingRoom(meetingId) {
+  const normalizedMeetingId = normalizeMeetingId(meetingId);
+  if (!socket || !Number.isInteger(normalizedMeetingId) || normalizedMeetingId <= 0) return;
+  socket.emit("meeting:leaveRoom", { meetingId: normalizedMeetingId });
+}
+
+function bindMeetingSocketEvents(handlers = {}) {
+  if (!socket) return;
+
+  const {
+    onMeetingStarted,
+    onWaitingRequest,
+    onUserAdmitted,
+    onUserRejected,
+    onUserLeft,
+    onHostDisconnected,
+    onHostReconnected,
+    onMeetingEnded,
+  } = handlers;
+
+  if (onMeetingStarted) {
+    socket.off("meeting:started", onMeetingStarted);
+    socket.on("meeting:started", onMeetingStarted);
+  }
+
+  if (onWaitingRequest) {
+    socket.off("meeting:waiting_request", onWaitingRequest);
+    socket.on("meeting:waiting_request", onWaitingRequest);
+  }
+
+  if (onUserAdmitted) {
+    socket.off("meeting:user_admitted", onUserAdmitted);
+    socket.on("meeting:user_admitted", onUserAdmitted);
+  }
+
+  if (onUserRejected) {
+    socket.off("meeting:user_rejected", onUserRejected);
+    socket.on("meeting:user_rejected", onUserRejected);
+  }
+
+  if (onUserLeft) {
+    socket.off("meeting:user_left", onUserLeft);
+    socket.on("meeting:user_left", onUserLeft);
+  }
+
+  if (onHostDisconnected) {
+    socket.off("meeting:host_disconnected", onHostDisconnected);
+    socket.on("meeting:host_disconnected", onHostDisconnected);
+  }
+
+  if (onHostReconnected) {
+    socket.off("meeting:host_reconnected", onHostReconnected);
+    socket.on("meeting:host_reconnected", onHostReconnected);
+  }
+
+  if (onMeetingEnded) {
+    socket.off("meeting:ended", onMeetingEnded);
+    socket.on("meeting:ended", onMeetingEnded);
+  }
+}
+
 export {
   getSocket,
+  connectSocket,
   connectChatSocket,
   disconnectChatSocket,
   bindChatSocketEvents,
@@ -122,4 +204,7 @@ export {
   sendSocketMessage,
   emitTyping,
   emitRead,
+  joinMeetingRoom,
+  leaveMeetingRoom,
+  bindMeetingSocketEvents,
 };

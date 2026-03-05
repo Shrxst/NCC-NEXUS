@@ -23,6 +23,13 @@ router.get(
   meetingController.listMeetings
 );
 
+// Get Meeting Details + Participants
+router.get(
+  "/:meetingId",
+  authenticate,
+  meetingController.getMeetingById
+);
+
 // Start Meeting
 router.patch(
   "/:meetingId/start",
@@ -74,7 +81,6 @@ router.patch(
 router.get(
   "/:meetingId/report",
   authenticate,
-  requireMeetingAuthority,
   meetingController.getMeetingReport
 );
 

@@ -1,10 +1,29 @@
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+
+const normalizeMeetingId = (meetingId) =>
+  String(meetingId ?? "")
+    .trim()
+    .replace(/^:/, "");
+
+const toIsoIfLocalDateTime = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+
+  // datetime-local values do not include timezone, convert explicitly to ISO.
+  const hasTimezone = /([zZ]|[+\-]\d{2}:?\d{2})$/.test(raw);
+  if (hasTimezone) return raw;
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toISOString();
+};
 
 const client = axios.create({
   baseURL: `${API_BASE_URL}/api/meetings`,
-  timeout: 15000,
+  timeout: 20000,
 });
 
 client.interceptors.request.use((config) => {
@@ -32,151 +51,176 @@ client.interceptors.response.use(
   }
 );
 
-const toBackendMeetingType = (value = "") => String(value).trim().toLowerCase();
-const toFrontendMeetingType = (value = "") => {
-  const map = { general: "General", training: "Training", briefing: "Briefing" };
-  return map[String(value).toLowerCase()] || "General";
+const toFrontendStatus = (value = "") => {
+  const status = String(value).toUpperCase();
+  if (status === "COMPLETED") return "ENDED";
+  return status || "SCHEDULED";
 };
 
-const toBackendStatus = (value = "") => String(value).trim().toLowerCase();
-const toFrontendStatus = (value = "") => String(value).trim().toUpperCase();
-
 const mapMeetingToFrontend = (meeting = {}) => ({
-  id: String(meeting.meeting_id),
+  id: String(meeting.meeting_id || ""),
   title: meeting.title || "",
   description: meeting.description || "",
   dateTime: meeting.scheduled_at || null,
-  meetingType: toFrontendMeetingType(meeting.meeting_type),
+  meetingType: meeting.meeting_type || "General",
   invitedUserIds: Array.isArray(meeting.invite_user_ids)
     ? meeting.invite_user_ids.map((id) => Number(id))
     : [],
-  createdBy: Number(meeting.created_by_user_id),
-  status: toFrontendStatus(meeting.status || "scheduled"),
-  startedAt: meeting.started_at || null,
-  endedAt: meeting.ended_at || null,
-  collegeId: Number(meeting.college_id),
+  createdBy: Number(meeting.created_by_user_id || 0),
+  createdByName: meeting.created_by_name || "",
+  createdByRole: meeting.created_by_role || "",
+  status: toFrontendStatus(meeting.status),
+  startedAt: meeting.actual_start_time || null,
+  endedAt: meeting.actual_end_time || null,
+  collegeId: Number(meeting.college_id || 0),
+  jitsi_room_name: meeting.jitsi_room_name || "",
 });
 
 const mapParticipantToFrontend = (participant = {}) => ({
-  participantId: Number(participant.participant_id),
-  meetingId: String(participant.meeting_id),
-  userId: Number(participant.user_id),
-  joinedAt: participant.joined_at || null,
-  leftAt: participant.left_at || null,
-  roleAtJoin: participant.role_at_join || null,
-  user: participant.user || null,
+  sessionId: Number(participant.session_id || 0),
+  meetingId: String(participant.meeting_id || ""),
+  userId: Number(participant.user_id || 0),
+  joinedAt: participant.join_time || null,
+  leftAt: participant.leave_time || null,
+  user: {
+    name: participant.full_name || `User #${participant.user_id}`,
+    role: participant.role_label || participant.role || "CADET",
+  },
 });
 
-const normalizeCreatePayload = (payload = {}) => {
-  const inviteUserIds = Array.isArray(payload.invitedUserIds)
-    ? payload.invitedUserIds
-    : Array.isArray(payload.invite_user_ids)
-      ? payload.invite_user_ids
-      : [];
-
-  return {
-    title: payload.title,
-    description: payload.description || "",
-    meeting_type: toBackendMeetingType(payload.meetingType || payload.meeting_type),
-    scheduled_at: payload.dateTime || payload.scheduled_at,
-    invite_user_ids: [...new Set(inviteUserIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))],
-  };
+const flattenMeetingBuckets = (payload = {}) => {
+  const ongoing = Array.isArray(payload.ongoing) ? payload.ongoing : [];
+  const upcoming = Array.isArray(payload.upcoming) ? payload.upcoming : [];
+  const past = Array.isArray(payload.past) ? payload.past : [];
+  return [...ongoing, ...upcoming, ...past].map(mapMeetingToFrontend);
 };
 
 export const meetingApi = {
-  listMeetings: async ({ status } = {}) => {
-    const params = {};
-    if (status) params.status = toBackendStatus(status);
-    const response = await client.get("/", { params });
+  listMeetings: async () => {
+    const response = await client.get("/");
     return {
       ...response,
-      data: (response.data?.data || []).map(mapMeetingToFrontend),
+      data: flattenMeetingBuckets(response.data || {}),
     };
   },
 
   getMeetingById: async (meetingId) => {
-    const response = await client.get(`/${meetingId}`);
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.get(`/${id}`);
     return {
       ...response,
-      data: mapMeetingToFrontend(response.data?.data || {}),
+      data: {
+        meeting: mapMeetingToFrontend(response.data?.meeting || {}),
+        participants: Array.isArray(response.data?.participants)
+          ? response.data.participants.map(mapParticipantToFrontend)
+          : [],
+      },
     };
   },
 
   createMeeting: async (payload) => {
-    const response = await client.post("/", normalizeCreatePayload(payload));
+    const inviteUserIds = Array.isArray(payload?.invitedUserIds)
+      ? payload.invitedUserIds
+      : [];
+    const scheduledAt = toIsoIfLocalDateTime(
+      payload?.dateTime || payload?.scheduled_at
+    );
+
+    const response = await client.post("/", {
+      title: payload?.title,
+      description: payload?.description || "",
+      scheduled_at: scheduledAt,
+      invite_user_ids: [...new Set(inviteUserIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))],
+    });
+
     return {
       ...response,
-      data: mapMeetingToFrontend(response.data?.data || {}),
+      data: mapMeetingToFrontend(response.data?.meeting || {}),
     };
   },
 
-  updateMeeting: async () => {
-    throw new Error("Meeting update endpoint is not available.");
-  },
-
   updateMeetingStatus: async ({ meetingId, status }) => {
-    const normalized = toBackendStatus(status);
-    if (normalized === "live") {
-      const response = await client.patch(`/${meetingId}/start`);
-      return { ...response, data: mapMeetingToFrontend(response.data?.data || {}) };
+    const id = normalizeMeetingId(meetingId);
+    const normalized = String(status || "").toUpperCase();
+
+    if (normalized === "LIVE") {
+      const response = await client.patch(`/${id}/start`);
+      return {
+        ...response,
+        data: mapMeetingToFrontend(response.data?.meeting || {}),
+      };
     }
-    if (normalized === "ended") {
-      const response = await client.patch(`/${meetingId}/end`);
-      return { ...response, data: mapMeetingToFrontend(response.data?.data || {}) };
+
+    if (normalized === "ENDED" || normalized === "COMPLETED") {
+      const response = await client.patch(`/${id}/end`);
+      return {
+        ...response,
+        data: mapMeetingToFrontend(response.data?.meeting || {}),
+      };
     }
-    if (normalized === "cancelled") {
-      const response = await client.patch(`/${meetingId}/cancel`);
-      return { ...response, data: mapMeetingToFrontend(response.data?.data || {}) };
-    }
+
     throw new Error("Unsupported meeting status transition.");
   },
 
   joinMeeting: async ({ meetingId }) => {
-    const response = await client.post(`/${meetingId}/join`);
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.post(`/${id}/join`);
     return {
       ...response,
-      data: mapParticipantToFrontend(response.data?.data || {}),
+      data: response.data || {},
     };
   },
 
   leaveMeeting: async ({ meetingId }) => {
-    const response = await client.post(`/${meetingId}/leave`);
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.patch(`/${id}/leave`);
     return {
       ...response,
-      data: mapParticipantToFrontend(response.data?.data || {}),
+      data: response.data || {},
+    };
+  },
+
+  getWaitingList: async (meetingId) => {
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.get(`/${id}/waiting`);
+    return {
+      ...response,
+      data: response.data?.waiting || [],
     };
   },
 
   getParticipants: async (meetingId) => {
-    const response = await client.get(`/${meetingId}/participants`);
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.get(`/${id}`);
     return {
       ...response,
-      data: (response.data?.data || []).map(mapParticipantToFrontend),
+      data: Array.isArray(response.data?.participants)
+        ? response.data.participants.map(mapParticipantToFrontend)
+        : [],
     };
   },
 
   requestAdmission: async ({ meetingId }) => {
-    const response = await client.post(`/${meetingId}/request-admission`);
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.post(`/${id}/join`);
     return response;
   },
 
-  admitUser: async ({ meetingId, userId }) => {
-    const response = await client.post(`/${meetingId}/admit`, { user_id: userId });
+  admitUser: async ({ meetingId, waitingId }) => {
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.patch(`/${id}/admit/${waitingId}`);
     return response;
   },
 
-  rejectUser: async ({ meetingId, userId }) => {
-    const response = await client.post(`/${meetingId}/reject`, { user_id: userId });
+  rejectUser: async ({ meetingId, waitingId }) => {
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.patch(`/${id}/reject/${waitingId}`);
     return response;
   },
 
   getMeetingReport: async (meetingId) => {
-    const response = await client.get(`/${meetingId}/report`);
-    return response;
-  },
-
-  toggleBriefingMode: async ({ meetingId, active }) => {
-    const response = await client.patch(`/${meetingId}/briefing`, { active });
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.get(`/${id}/report`);
     return response;
   },
 };

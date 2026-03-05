@@ -53,7 +53,7 @@ const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateL
   const ongoing = visibleMeetings.filter((meeting) => meeting.status === MEETING_STATUS.LIVE);
   const upcoming = visibleMeetings.filter((meeting) => meeting.status === MEETING_STATUS.SCHEDULED);
   const past = visibleMeetings.filter((meeting) =>
-    [MEETING_STATUS.ENDED, MEETING_STATUS.CANCELLED].includes(meeting.status)
+    [MEETING_STATUS.ENDED, MEETING_STATUS.COMPLETED, MEETING_STATUS.CANCELLED].includes(meeting.status)
   );
 
   const hasAnyMeetings = ongoing.length > 0 || upcoming.length > 0 || past.length > 0;

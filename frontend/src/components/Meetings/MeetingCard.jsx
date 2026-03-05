@@ -17,7 +17,9 @@ const MeetingCard = ({ meeting, role, currentUser, participants = [], detailsPat
   const authority = isAuthority(role);
   const isLive = meeting.status === MEETING_STATUS.LIVE;
   const isScheduled = meeting.status === MEETING_STATUS.SCHEDULED;
-  const isCompleted = meeting.status === MEETING_STATUS.ENDED;
+  const isCompleted =
+    meeting.status === MEETING_STATUS.ENDED ||
+    meeting.status === MEETING_STATUS.COMPLETED;
   const canJoin = invited && isLive;
   const timeUntil = isScheduled ? getTimeUntil(meeting.dateTime) : "";
 

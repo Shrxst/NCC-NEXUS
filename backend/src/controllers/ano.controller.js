@@ -163,6 +163,7 @@ const getCadets = async (req, res) => {
       .leftJoin("cadet_ranks as r", "cp.rank_id", "r.id")
       .where("cp.college_id", ano.college_id)
       .select(
+        "u.user_id",
         "cp.regimental_no",
         "u.username as name",
         "u.email",
@@ -182,6 +183,7 @@ const getCadets = async (req, res) => {
       }
 
       return {
+        user_id: user.user_id,
         regimental_no: user.regimental_no,
         name: user.name,
         email: user.email,

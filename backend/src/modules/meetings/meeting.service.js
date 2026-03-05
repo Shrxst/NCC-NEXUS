@@ -11,6 +11,10 @@ const generateRoomName = (collegeShortName) => {
 const createMeeting = async (data, user) => {
   const { title, description, scheduled_at } = data;
   const { user_id, college_id } = user;
+  const inviteUserIds = Array.isArray(data?.invite_user_ids)
+    ? data.invite_user_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+  const normalizedInviteUserIds = [...new Set([user_id, ...inviteUserIds])];
 
   // Get college short name
   const college = await db("colleges")
@@ -32,19 +36,75 @@ const createMeeting = async (data, user) => {
       scheduled_at,
       created_by_user_id: user_id,
       jitsi_room_name: roomName,
+      invite_user_ids: normalizedInviteUserIds,
     })
     .returning("*");
 
   return meeting;
 };
 
+const getMeetingById = async (meetingId, user) => {
+  const { college_id } = user;
+
+  const meeting = await db("meetings")
+    .leftJoin("users as cu", "cu.user_id", "meetings.created_by_user_id")
+    .where({
+      "meetings.meeting_id": meetingId,
+      "meetings.college_id": college_id,
+    })
+    .whereNull("meetings.deleted_at")
+    .select(
+      "meetings.*",
+      "cu.username as created_by_name",
+      "cu.role as created_by_role"
+    )
+    .first();
+
+  if (!meeting) {
+    throw new Error("Meeting not found");
+  }
+
+  const participants = await db("meeting_participant_sessions as s")
+    .leftJoin("users as u", "u.user_id", "s.user_id")
+    .leftJoin("cadet_profiles as cp", "cp.user_id", "u.user_id")
+    .where("s.meeting_id", meetingId)
+    .orderBy("s.join_time", "asc")
+    .select(
+      "s.session_id",
+      "s.meeting_id",
+      "s.user_id",
+      "s.join_time",
+      "s.leave_time",
+      "cp.full_name",
+      "u.username",
+      "u.role"
+    );
+
+  const normalizedParticipants = participants.map((row) => ({
+    ...row,
+    full_name: row.full_name || row.username || `User #${row.user_id}`,
+    role_label:
+      Number(row.user_id) === Number(meeting.created_by_user_id)
+        ? "HOST"
+        : (row.role || "CADET"),
+  }));
+
+  return { meeting, participants: normalizedParticipants };
+};
+
 const listMeetings = async (user) => {
   const { college_id } = user;
 
   const meetings = await db("meetings")
-    .where({ college_id })
-    .whereNull("deleted_at")
-    .orderBy("scheduled_at", "desc");
+    .leftJoin("users as cu", "cu.user_id", "meetings.created_by_user_id")
+    .where({ "meetings.college_id": college_id })
+    .whereNull("meetings.deleted_at")
+    .orderBy("meetings.scheduled_at", "desc")
+    .select(
+      "meetings.*",
+      "cu.username as created_by_name",
+      "cu.role as created_by_role"
+    );
 
   const now = new Date();
 
@@ -165,14 +225,15 @@ const requestToJoin = async (meetingId, user) => {
   }
 
   // 4️⃣ Insert new waiting request
-  await db("meeting_waiting_room").insert({
+  const [waitingRequest] = await db("meeting_waiting_room").insert({
     meeting_id: meetingId,
     user_id,
     status: "WAITING",
-  });
+  }).returning("*");
 
   return {
     message: "Join request sent. Waiting for approval.",
+    waiting: waitingRequest || null,
   };
 };
 
@@ -250,7 +311,11 @@ const admitUser = async (meetingId, waitingId, user) => {
     });
   }
 
-  return { message: "User admitted successfully" };
+  return {
+    message: "User admitted successfully",
+    waitingId: Number(waitingId),
+    userId: Number(waitingEntry.user_id),
+  };
 };
 
 const rejectUser = async (meetingId, waitingId, user) => {
@@ -279,7 +344,11 @@ const rejectUser = async (meetingId, waitingId, user) => {
       updated_at: db.fn.now(),
     });
 
-  return { message: "User rejected successfully" };
+  return {
+    message: "User rejected successfully",
+    waitingId: Number(waitingId),
+    userId: Number(waitingEntry.user_id),
+  };
 };
 
 const endMeeting = async (meetingId, user) => {
@@ -361,41 +430,76 @@ const endMeeting = async (meetingId, user) => {
       }
     });
 
+    const hostUserId = Number(meeting.created_by_user_id);
+    const invitedUserIds = Array.isArray(meeting.invite_user_ids)
+      ? meeting.invite_user_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+      : [];
+    const nonHostSessionUserIds = Object.keys(userMap)
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0 && id !== hostUserId);
+
+    const nonHostInvitedUserIds =
+      invitedUserIds.length > 0
+        ? [...new Set(invitedUserIds.filter((id) => id !== hostUserId))]
+        : [...new Set(nonHostSessionUserIds)];
+    const hostStats = userMap[String(hostUserId)] || null;
+
     let totalPresent = 0;
-    let totalAbsent = 0;
     let lateCount = 0;
     let totalDurationSum = 0;
 
-    for (const userId in userMap) {
-      const { totalMinutes, firstJoin } = userMap[userId];
+    for (const invitedUserId of nonHostInvitedUserIds) {
+      const stats = userMap[String(invitedUserId)] || {
+        totalMinutes: 0,
+        firstJoin: null,
+      };
 
       const percentage =
         totalMeetingDuration > 0
-          ? (totalMinutes / totalMeetingDuration) * 100
+          ? (stats.totalMinutes / totalMeetingDuration) * 100
           : 0;
 
       const isPresent = percentage >= 60;
-      const wasLate =
-        (new Date(firstJoin) - startTime) / (1000 * 60) > 10;
+      const wasLate = stats.firstJoin
+        ? (new Date(stats.firstJoin) - startTime) / (1000 * 60) > 10
+        : false;
 
       if (isPresent) totalPresent++;
-      else totalAbsent++;
-
       if (wasLate) lateCount++;
 
-      totalDurationSum += totalMinutes;
+      totalDurationSum += stats.totalMinutes;
 
       await trx("meeting_attendance").insert({
         meeting_id: meetingId,
-        user_id: userId,
-        total_duration_minutes: Math.round(totalMinutes),
+        user_id: invitedUserId,
+        total_duration_minutes: Math.round(stats.totalMinutes),
         percentage_attended: percentage.toFixed(2),
         attendance_status: isPresent ? "PRESENT" : "ABSENT",
         was_late: wasLate,
       });
     }
 
-    const totalParticipants = totalPresent + totalAbsent;
+    // Keep host in attendance details, but do not count host in invite attendance percentage.
+    if (hostStats) {
+      const hostPercentage =
+        totalMeetingDuration > 0
+          ? (hostStats.totalMinutes / totalMeetingDuration) * 100
+          : 0;
+      const hostWasLate =
+        (new Date(hostStats.firstJoin) - startTime) / (1000 * 60) > 10;
+
+      await trx("meeting_attendance").insert({
+        meeting_id: meetingId,
+        user_id: hostUserId,
+        total_duration_minutes: Math.round(hostStats.totalMinutes),
+        percentage_attended: hostPercentage.toFixed(2),
+        attendance_status: hostPercentage >= 60 ? "PRESENT" : "ABSENT",
+        was_late: hostWasLate,
+      });
+    }
+
+    const totalParticipants = nonHostInvitedUserIds.length;
+    const totalAbsent = Math.max(0, totalParticipants - totalPresent);
 
     const attendancePercentage =
       totalParticipants > 0
@@ -427,7 +531,7 @@ const endMeeting = async (meetingId, user) => {
 };
 
 const getMeetingReport = async (meetingId, user) => {
-  const { college_id } = user;
+  const { college_id, user_id } = user;
 
   const meeting = await db("meetings")
     .where({ meeting_id: meetingId, college_id })
@@ -435,6 +539,17 @@ const getMeetingReport = async (meetingId, user) => {
 
   if (!meeting || meeting.status !== "COMPLETED") {
     throw new Error("Meeting report not available");
+  }
+
+  const invitedUserIds = Array.isArray(meeting.invite_user_ids)
+    ? meeting.invite_user_ids.map((id) => Number(id))
+    : [];
+
+  const isHost = Number(meeting.created_by_user_id) === Number(user_id);
+  const isInvited = invitedUserIds.includes(Number(user_id));
+
+  if (!isHost && !isInvited) {
+    throw new Error("Forbidden");
   }
 
   const report = await db("meeting_reports")
@@ -447,6 +562,9 @@ const getMeetingReport = async (meetingId, user) => {
     .leftJoin("cadet_ranks as r", "cp.rank_id", "r.id")
     .where("ma.meeting_id", meetingId)
     .select(
+      "ma.user_id",
+      "u.username",
+      "u.role",
       "cp.full_name",
       "r.rank_name",
       "ma.total_duration_minutes",
@@ -455,10 +573,19 @@ const getMeetingReport = async (meetingId, user) => {
       "ma.was_late"
     );
 
+  const normalizedAttendance = attendance.map((row) => {
+    const isHost = Number(row.user_id) === Number(meeting.created_by_user_id);
+    return {
+      ...row,
+      full_name: row.full_name || row.username || `User #${row.user_id}`,
+      rank_name: isHost ? "HOST" : (row.rank_name || row.role || "CADET"),
+    };
+  });
+
   return {
     meeting,
     report,
-    attendance,
+    attendance: normalizedAttendance,
   };
 };
 
@@ -500,6 +627,7 @@ const leaveMeeting = async (meetingId, user) => {
 
 module.exports = {
   createMeeting,
+  getMeetingById,
   listMeetings,
   startMeeting,
   requestToJoin,
