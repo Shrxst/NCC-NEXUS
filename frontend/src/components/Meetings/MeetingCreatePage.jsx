@@ -14,7 +14,13 @@ const normalizeRoleLabel = (role = "") => {
   return r;
 };
 
-const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated, onCancel }) => {
+const toLocalDateTimeMin = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const MeetingCreatePage = ({ embedded = false, basePath = "/meetings" }) => {
   const role = getCurrentRole();
   const currentUser = getCurrentUser();
   const dispatch = useDispatch();
@@ -35,6 +41,7 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const minDateTime = useMemo(() => toLocalDateTimeMin(), []);
 
   const roleAllowed = canCreateMeeting(role);
 
@@ -51,13 +58,13 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
       const data = await response.json();
       const list = Array.isArray(data) ? data : [];
       return list.map((cadet) => ({
-        id: cadet.regimental_no,
+        id: Number(cadet.user_id),
         name: cadet.name || "Unknown",
         email: cadet.email || "",
         unit: cadet.unit || "",
         rank: cadet.rank || "",
         role: normalizeRoleLabel(cadet.role),
-      }));
+      })).filter((cadet) => Number.isInteger(cadet.id) && cadet.id > 0);
     };
 
     const fetchFromChatUsers = async () => {
@@ -69,19 +76,19 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
       const users = data?.data?.users || data?.users || [];
       if (!Array.isArray(users)) return null;
       return users.map((contact) => ({
-        id: contact.peer_user_id,
+        id: Number(contact.peer_user_id),
         name: contact.room_name || contact.participants?.[0]?.name || `User #${contact.peer_user_id}`,
         email: "",
         unit: "",
         rank: "",
         role: normalizeRoleLabel(contact.peer_role),
-      }));
+      })).filter((user) => Number.isInteger(user.id) && user.id > 0);
     };
 
     const loadUsers = async () => {
       try {
-        // ANO can use /api/ano/cadets; SUO falls back to chat users endpoint
-        let result = await fetchFromAnoCadets();
+        // ANO can use /api/ano/cadets; others use chat users endpoint.
+        let result = role === "ANO" ? await fetchFromAnoCadets() : null;
         if (!result) {
           result = await fetchFromChatUsers();
         }
@@ -98,7 +105,7 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
     };
 
     loadUsers();
-  }, [roleAllowed, currentUser.id]);
+  }, [roleAllowed, currentUser.id, role]);
 
   const filteredUsers = useMemo(() => {
     return cadets.filter((user) => {
@@ -108,6 +115,15 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
     });
   }, [cadets, search, roleFilter]);
 
+  const filteredUserIds = useMemo(
+    () => filteredUsers.map((user) => user.id),
+    [filteredUsers]
+  );
+
+  const allFilteredSelected =
+    filteredUserIds.length > 0 &&
+    filteredUserIds.every((id) => selectedUsers.includes(id));
+
   const isValid =
     form.title.trim().length > 1 &&
     form.description.trim().length > 1 &&
@@ -116,13 +132,30 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
     selectedUsers.length > 0;
 
   const toggleUser = (id) => {
+    const normalizedId = Number(id);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
+
     setSelectedUsers((prev) =>
-      prev.includes(id) ? prev.filter((userId) => userId !== id) : [...prev, id]
+      prev.includes(normalizedId)
+        ? prev.filter((userId) => userId !== normalizedId)
+        : [...prev, normalizedId]
     );
   };
 
   const removeUser = (id) => {
-    setSelectedUsers((prev) => prev.filter((userId) => userId !== id));
+    const normalizedId = Number(id);
+    setSelectedUsers((prev) => prev.filter((userId) => userId !== normalizedId));
+  };
+
+  const handleSelectAllFiltered = () => {
+    if (filteredUserIds.length === 0) return;
+
+    setSelectedUsers((prev) => {
+      if (allFilteredSelected) {
+        return prev.filter((id) => !filteredUserIds.includes(id));
+      }
+      return [...new Set([...prev, ...filteredUserIds])];
+    });
   };
 
   const handleSubmit = (event) => {
@@ -199,6 +232,8 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
               <input
                 type="datetime-local"
                 value={form.dateTime}
+                min={minDateTime}
+                step="60"
                 onChange={(event) => setForm((prev) => ({ ...prev, dateTime: event.target.value }))}
               />
             </label>
@@ -279,6 +314,14 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated
               <option value="ALUMNI">Alumni</option>
               <option value="ANO">ANO</option>
             </select>
+            <button
+              type="button"
+              className="meeting-btn meeting-btn-secondary"
+              onClick={handleSelectAllFiltered}
+              disabled={filteredUserIds.length === 0}
+            >
+              {allFilteredSelected ? "Unselect All" : "Select All"}
+            </button>
           </div>
 
           {/* User list */}

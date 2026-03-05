@@ -2,7 +2,7 @@ export const MEETING_STATUS = {
   SCHEDULED: "SCHEDULED",
   LIVE: "LIVE",
   ENDED: "ENDED",
-  COMPLETED: "ENDED",
+  COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
 };
 
@@ -16,9 +16,27 @@ export const normalizeRole = (value = "") => {
 
 export const getCurrentRole = () => normalizeRole(localStorage.getItem("role") || "CADET");
 
+const decodeJwtPayload = (token = "") => {
+  try {
+    const parts = String(token).split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join("")
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
 export const getCurrentUser = () => {
   const stored = JSON.parse(localStorage.getItem("user") || "{}");
-  const id = Number(stored.user_id || stored.id || 0);
+  const tokenPayload = decodeJwtPayload(localStorage.getItem("token") || "");
+  const id = Number(stored.user_id || stored.id || tokenPayload?.user_id || 0);
   const role = getCurrentRole();
 
   return {
@@ -90,6 +108,7 @@ export const getStatusLabel = (status) => {
   switch (status) {
     case MEETING_STATUS.LIVE:
       return "Live";
+    case MEETING_STATUS.COMPLETED:
     case MEETING_STATUS.ENDED:
       return "Completed";
     case MEETING_STATUS.CANCELLED:
@@ -103,6 +122,7 @@ export const getStatusClass = (status) => {
   switch (status) {
     case MEETING_STATUS.LIVE:
       return "meeting-status-live";
+    case MEETING_STATUS.COMPLETED:
     case MEETING_STATUS.ENDED:
       return "meeting-status-completed";
     case MEETING_STATUS.CANCELLED:

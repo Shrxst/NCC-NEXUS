@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FaChartBar, FaClock } from "react-icons/fa";
 
 function formatTimeLeft(deadline) {
@@ -11,8 +11,16 @@ function formatTimeLeft(deadline) {
 }
 
 export default function PollCard({ post, currentRole, onVote }) {
-  const [selected, setSelected] = useState([]);
   const poll = post.pollDetails;
+  const [selected, setSelected] = useState([]);
+
+  useEffect(() => {
+    const selectedFromBackend = (poll?.options || [])
+      .filter((option) => Boolean(option.selected))
+      .map((option) => option.id);
+    setSelected(selectedFromBackend);
+  }, [poll]);
+
   const totalVotes = useMemo(
     () => (poll?.options || []).reduce((sum, option) => sum + Number(option.votes || 0), 0),
     [poll]
@@ -23,6 +31,7 @@ export default function PollCard({ post, currentRole, onVote }) {
 
   const toggleOption = (optionId) => {
     if (expired) return;
+    if (selected.includes(optionId)) return;
     setSelected([optionId]);
     onVote(post.id, [optionId], currentRole);
   };

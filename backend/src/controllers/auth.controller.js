@@ -125,6 +125,7 @@ const cadetLogin = async (req, res) => {
       message: "Login successful",
       token,
       user: {
+        user_id: userData.user_id,
         regimental_no: userData.regimental_no || null,
         name: userData.full_name,
         role: userData.system_role,

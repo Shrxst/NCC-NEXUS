@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { Trash2, CalendarDays, Tag, FileText, Users, ArrowLeft, Play, Edit3, XCircle } from "lucide-react";
-import { deleteMeeting, editMeeting, setCurrentMeeting, updateMeetingStatus, fetchMeetingById, fetchParticipants } from "../../store/meetingSlice";
+import { Trash2, CalendarDays, Tag, FileText, Users, ArrowLeft, Play, Edit3 } from "lucide-react";
+import { deleteMeeting, editMeeting, setCurrentMeeting, updateMeetingStatusAsync, fetchMeetingById, fetchParticipants } from "../../store/meetingSlice";
 import { API_BASE_URL } from "../../api/config";
 import {
   MEETING_STATUS,
@@ -18,6 +18,24 @@ import {
 import AuthorityControlPanel from "./AuthorityControlPanel";
 import WaitingRoomPanel from "./WaitingRoomPanel";
 import "./meetingModule.css";
+
+const toLocalInputDateTime = (value) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const toIsoIfLocalDateTime = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return raw;
+  const hasTimezone = /([zZ]|[+\-]\d{2}:?\d{2})$/.test(raw);
+  if (hasTimezone) return raw;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toISOString();
+};
 
 const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
   const { meetingId } = useParams();
@@ -37,7 +55,7 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
   const [draft, setDraft] = useState({
     title: meeting?.title || "",
     description: meeting?.description || "",
-    dateTime: meeting?.dateTime || "",
+    dateTime: toLocalInputDateTime(meeting?.dateTime),
     meetingType: meeting?.meetingType || "General",
   });
   const [cadets, setCadets] = useState([]);
@@ -56,7 +74,12 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
       });
       if (!res.ok) return null;
       const data = await res.json();
-      return Array.isArray(data) ? data : null;
+      if (!Array.isArray(data)) return null;
+      return data.map((item) => ({
+        user_id: Number(item.user_id),
+        name: item.name || `User #${item.user_id}`,
+        role: item.role || "",
+      }));
     };
 
     const tryChatUsers = async () => {
@@ -68,7 +91,7 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
       const users = data?.data?.users || data?.users || [];
       if (!Array.isArray(users)) return null;
       return users.map((contact) => ({
-        regimental_no: contact.peer_user_id,
+        user_id: Number(contact.peer_user_id),
         name: contact.room_name || contact.participants?.[0]?.name || `User #${contact.peer_user_id}`,
         role: contact.peer_role || "",
       }));
@@ -76,24 +99,47 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
 
     (async () => {
       try {
-        const result = (await tryAnoCadets()) || (await tryChatUsers()) || [];
+        const result =
+          (role === "ANO" ? await tryAnoCadets() : null) ||
+          (await tryChatUsers()) ||
+          [];
         setCadets(result);
       } catch {
         setCadets([]);
       }
     })();
-  }, [currentUser.id]);
+  }, [currentUser.id, role]);
+
+  useEffect(() => {
+    if (!meeting) return;
+    setDraft({
+      title: meeting.title || "",
+      description: meeting.description || "",
+      dateTime: toLocalInputDateTime(meeting.dateTime),
+      meetingType: meeting.meetingType || "General",
+    });
+  }, [meeting]);
 
   const invitedUsers = useMemo(() => {
     if (!meeting) return [];
     const ids = meeting.invitedUserIds || [];
     return ids.map((id) => {
-      const cadet = cadets.find((c) => Number(c.regimental_no || c.peer_user_id) === Number(id));
+      if (Number(id) === Number(meeting.createdBy)) {
+        return {
+          id,
+          name:
+            meeting.createdByName ||
+            (Number(currentUser.id) === Number(id) ? currentUser.name : `User #${id}`),
+          role: (meeting.createdByRole || currentUser.role || "ANO").toUpperCase(),
+        };
+      }
+
+      const cadet = cadets.find((c) => Number(c.user_id) === Number(id));
       return cadet
         ? { id, name: cadet.name || "Unknown", role: (cadet.role || "").toUpperCase() }
         : { id, name: `User #${id}`, role: "" };
     });
-  }, [meeting, cadets]);
+  }, [meeting, cadets, currentUser.id, currentUser.name, currentUser.role]);
 
   if (!meeting) {
     return (
@@ -116,21 +162,27 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
 
   const isLive = meeting.status === MEETING_STATUS.LIVE;
   const isScheduled = meeting.status === MEETING_STATUS.SCHEDULED;
-  const isCompleted = meeting.status === MEETING_STATUS.ENDED;
+  const isCompleted =
+    meeting.status === MEETING_STATUS.ENDED ||
+    meeting.status === MEETING_STATUS.COMPLETED;
 
   const saveEdit = () => {
-    dispatch(editMeeting({ meetingId: meeting.id, updates: draft }));
+    dispatch(
+      editMeeting({
+        meetingId: meeting.id,
+        updates: {
+          ...draft,
+          dateTime: toIsoIfLocalDateTime(draft.dateTime),
+        },
+      })
+    );
     setEditMode(false);
   };
 
   const startMeeting = () => {
-    dispatch(updateMeetingStatus({ meetingId: meeting.id, status: MEETING_STATUS.LIVE }));
+    dispatch(updateMeetingStatusAsync({ meetingId: meeting.id, status: MEETING_STATUS.LIVE }));
     dispatch(setCurrentMeeting({ meetingId: meeting.id, userId: currentUser.id }));
     navigate(`${basePath}/${meeting.id}/room`);
-  };
-
-  const cancelMeeting = () => {
-    dispatch(updateMeetingStatus({ meetingId: meeting.id, status: MEETING_STATUS.CANCELLED }));
   };
 
   const handleDelete = () => {
@@ -222,10 +274,6 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
               <Edit3 size={14} />
               {editMode ? "Close Edit" : "Edit"}
             </button>
-            <button className="meeting-btn meeting-btn-secondary" onClick={cancelMeeting}>
-              <XCircle size={14} />
-              Cancel
-            </button>
             <button className="meeting-btn meeting-btn-danger" onClick={handleDelete}>
               <Trash2 size={14} />
               Delete
@@ -283,7 +331,11 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
       {/* Authority controls for LIVE meetings */}
       {authority && isLive ? (
         <div className="meeting-detail-live-section">
-          <AuthorityControlPanel meeting={meeting} basePath={basePath} />
+          <AuthorityControlPanel
+            meeting={meeting}
+            basePath={basePath}
+            canToggleBriefing={host}
+          />
           <WaitingRoomPanel meetingId={meeting.id} />
         </div>
       ) : null}

@@ -32,6 +32,26 @@ const createMeeting = async (req, res) => {
   }
 };
 
+const getMeetingById = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const data = await meetingService.getMeetingById(meetingId, req.user);
+
+    return res.json({
+      message: "Meeting fetched successfully",
+      ...data,
+    });
+  } catch (err) {
+    if (err.message === "Meeting not found") {
+      return res.status(404).json({ message: err.message });
+    }
+    return res.status(500).json({
+      message: "Failed to fetch meeting",
+      error: err.message,
+    });
+  }
+};
+
 const listMeetings = async (req, res) => {
   try {
     const data = await meetingService.listMeetings(req.user);
@@ -57,6 +77,16 @@ const startMeeting = async (req, res) => {
       meetingId,
       req.user
     );
+
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:started", {
+        meetingId,
+        meeting,
+        startedBy: req.user.user_id,
+      });
+    }
 
     return res.json({
       message: "Meeting started successfully",
@@ -88,6 +118,16 @@ const requestToJoin = async (req, res) => {
       meetingId,
       req.user
     );
+
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:waiting_request", {
+        meetingId,
+        userId: req.user.user_id,
+        requestedAt: new Date(),
+      });
+    }
 
     return res.json(result);
   } catch (err) {
@@ -132,6 +172,17 @@ const admitUser = async (req, res) => {
       req.user
     );
 
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:user_admitted", {
+        meetingId,
+        waitingId: result.waitingId || Number(waitingId),
+        userId: result.userId,
+        admittedBy: req.user.user_id,
+      });
+    }
+
     return res.json(result);
   } catch (err) {
     return res.status(400).json({ message: err.message });
@@ -148,6 +199,17 @@ const rejectUser = async (req, res) => {
       req.user
     );
 
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:user_rejected", {
+        meetingId,
+        waitingId: result.waitingId || Number(waitingId),
+        userId: result.userId,
+        rejectedBy: req.user.user_id,
+      });
+    }
+
     return res.json(result);
   } catch (err) {
     return res.status(400).json({ message: err.message });
@@ -162,6 +224,15 @@ const endMeeting = async (req, res) => {
       meetingId,
       req.user
     );
+
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:ended", {
+        meetingId,
+        endedBy: req.user.user_id,
+      });
+    }
 
     return res.json(result);
   } catch (err) {
@@ -184,6 +255,12 @@ const getMeetingReport = async (req, res) => {
 
     return res.json(data);
   } catch (err) {
+    if (err.message === "Forbidden") {
+      return res.status(403).json({ message: err.message });
+    }
+    if (err.message === "Meeting report not available") {
+      return res.status(404).json({ message: err.message });
+    }
     return res.status(400).json({
       message: err.message,
     });
@@ -199,6 +276,15 @@ const leaveMeeting = async (req, res) => {
       req.user
     );
 
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:user_left", {
+        meetingId,
+        userId: req.user.user_id,
+      });
+    }
+
     return res.json(result);
   } catch (err) {
     return res.status(400).json({
@@ -209,6 +295,7 @@ const leaveMeeting = async (req, res) => {
 
 module.exports = {
   createMeeting,
+  getMeetingById,
   listMeetings,
   startMeeting,
   requestToJoin,

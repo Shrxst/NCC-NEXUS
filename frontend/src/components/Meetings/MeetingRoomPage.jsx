@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { LogOut, MessageSquare, Users, Shield, X, Video, VideoOff, Mic, MicOff } from "lucide-react";
+import { LogOut, Shield, X } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+
 import {
   joinMeeting,
   leaveMeeting,
@@ -10,9 +11,14 @@ import {
   setCurrentMeeting,
   fetchMeetingById,
   fetchParticipants,
-  toggleMic,
-  toggleCamera,
 } from "../../store/meetingSlice";
+
+import {
+  joinMeetingRoom,
+  leaveMeetingRoom,
+  bindMeetingSocketEvents,
+} from "../../features/ui/socket";
+
 import {
   MEETING_STATUS,
   getCurrentRole,
@@ -21,12 +27,19 @@ import {
   isInvitedToMeeting,
   isMeetingHost,
 } from "./meetingUtils";
+
 import WaitingRoomScreen from "./WaitingRoomScreen";
 import AuthorityControlPanel from "./AuthorityControlPanel";
 import WaitingRoomPanel from "./WaitingRoomPanel";
 import BriefingBanner from "./BriefingBanner";
-import MeetingChat from "./MeetingChat";
+
 import "./meetingModule.css";
+
+const JITSI_DOMAIN = import.meta.env.VITE_JITSI_DOMAIN || "meet.jit.si";
+const JITSI_APP_ID = import.meta.env.VITE_JITSI_APP_ID || "";
+const JITSI_JWT = import.meta.env.VITE_JITSI_JWT || "";
+const JITSI_SCRIPT_URL = `https://${JITSI_DOMAIN}/external_api.js`;
+const isJaasDomain = JITSI_DOMAIN.includes("8x8.vc");
 
 const formatTimer = (seconds) => {
   const hh = String(Math.floor(seconds / 3600)).padStart(2, "0");
@@ -35,68 +48,84 @@ const formatTimer = (seconds) => {
   return `${hh}:${mm}:${ss}`;
 };
 
-const TILE_COLORS = [
-  "#1a237e", "#0d47a1", "#1565c0", "#283593",
-  "#2e7d32", "#00695c", "#4527a0", "#6a1b9a",
-  "#ad1457", "#c62828", "#e65100", "#37474f",
-];
-
-const getTileColor = (userId) => TILE_COLORS[Math.abs(Number(userId)) % TILE_COLORS.length];
-
-const getInitials = (name = "") => {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.charAt(0).toUpperCase() || "?";
-};
-
-const ParticipantTile = ({ participant, isCurrentUser, isSpeaker }) => {
-  const name = participant.user?.name || `User #${participant.userId}`;
-  const initials = getInitials(name);
-  const color = getTileColor(participant.userId);
-  const host = participant.isHost;
-
-  return (
-    <div className={`mr-tile ${isSpeaker ? "mr-tile-speaking" : ""} ${isCurrentUser ? "mr-tile-self" : ""}`}>
-      <div className="mr-tile-avatar" style={{ background: color }}>
-        {initials}
-      </div>
-      <div className="mr-tile-footer">
-        <span className="mr-tile-name">
-          {isCurrentUser ? "You" : name}
-          {host ? <span className="mr-tile-host">Host</span> : null}
-        </span>
-        <div className="mr-tile-icons">
-          {participant.micOn === false ? <MicOff size={14} /> : <Mic size={14} className="mr-tile-icon-on" />}
-          {participant.cameraOn === false ? <VideoOff size={14} /> : <Video size={14} className="mr-tile-icon-on" />}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
-  const { meetingId } = useParams();
+  const { meetingId: rawMeetingId } = useParams();
+  const meetingId = String(rawMeetingId || "").replace(/^:/, "");
   const role = getCurrentRole();
   const currentUser = getCurrentUser();
-  const navigate = useNavigate();
+
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+
   const authority = isAuthority(role);
 
   const meetings = useSelector((state) => state.meetings.meetings);
   const participantsMap = useSelector((state) => state.meetings.participants);
-  const admittedUsers = useSelector((state) => state.meetings.admittedUsers[meetingId] || []);
-  const isBriefing = useSelector((state) => state.meetings.briefingMode[meetingId] || false);
-  const waitingRoom = useSelector((state) => state.meetings.waitingRoom[meetingId] || []);
+  const admittedUsers =
+    useSelector((state) => state.meetings.admittedUsers[meetingId]) || [];
+  const waitingRoom =
+    useSelector((state) => state.meetings.waitingRoom[meetingId]) || [];
+  const isBriefing = useSelector(
+    (state) => state.meetings.briefingMode[meetingId] || false
+  );
 
   const meeting = meetings.find((item) => item.id === meetingId);
   const participants = participantsMap[meetingId] || [];
 
   const [seconds, setSeconds] = useState(0);
-  const [activePanel, setActivePanel] = useState(null);
+  const [activePanel, setActivePanel] = useState(authority ? "controls" : null);
+  const [isJitsiScriptReady, setIsJitsiScriptReady] = useState(
+    Boolean(window.JitsiMeetExternalAPI)
+  );
+  const [hostDisconnectedState, setHostDisconnectedState] = useState({
+    active: false,
+    deadlineAt: null,
+  });
+
+  const jitsiContainerRef = useRef(null);
+  const jitsiApiRef = useRef(null);
+  const initializedMeetingIdRef = useRef(null);
 
   const isAdmitted = admittedUsers.includes(Number(currentUser.id));
+  const hasActiveSession = participants.some(
+    (p) => Number(p.userId) === Number(currentUser.id) && !p.leftAt
+  );
   const host = meeting ? isMeetingHost(meeting, currentUser.id) : false;
-  const canEnterDirectly = authority || host;
+  const canEnterDirectly = authority || host || hasActiveSession;
+
+  useEffect(() => {
+    setActivePanel(authority ? "controls" : null);
+  }, [authority]);
+
+  useEffect(() => {
+    if (window.JitsiMeetExternalAPI) {
+      setIsJitsiScriptReady(true);
+      return;
+    }
+
+    const existingScript = document.querySelector(
+      `script[src="${JITSI_SCRIPT_URL}"]`
+    );
+
+    const markReady = () => setIsJitsiScriptReady(true);
+
+    if (existingScript) {
+      existingScript.addEventListener("load", markReady);
+      return () => {
+        existingScript.removeEventListener("load", markReady);
+      };
+    }
+
+    const script = document.createElement("script");
+    script.src = JITSI_SCRIPT_URL;
+    script.async = true;
+    script.addEventListener("load", markReady);
+    document.body.appendChild(script);
+
+    return () => {
+      script.removeEventListener("load", markReady);
+    };
+  }, []);
 
   useEffect(() => {
     if (meetingId) {
@@ -105,37 +134,40 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
     }
   }, [dispatch, meetingId]);
 
-  const participantViews = useMemo(() => {
-    return participants.map((participant) => {
-      const user = participant.user || {
-        name: `User #${participant.userId}`,
-        role: participant.roleAtJoin || "",
-      };
-      return {
-        ...participant,
-        user,
-        isHost: meeting ? Number(meeting.createdBy) === Number(participant.userId) : false,
-      };
-    });
-  }, [participants, meeting]);
-
   useEffect(() => {
     if (!meeting) return;
     if (!isInvitedToMeeting(meeting, currentUser.id, role)) return;
     if (!canEnterDirectly && !isAdmitted) return;
 
-    dispatch(setCurrentMeeting({ meetingId: meeting.id, userId: currentUser.id }));
-    dispatch(joinMeeting({ meetingId: meeting.id, userId: currentUser.id }));
+    dispatch(
+      setCurrentMeeting({
+        meetingId: meeting.id,
+        userId: currentUser.id,
+      })
+    );
+
+    dispatch(
+      joinMeeting({
+        meetingId: meeting.id,
+        userId: currentUser.id,
+      })
+    );
+
     dispatch(setConnectionStatus("CONNECTED"));
 
     return () => {
-      dispatch(leaveMeeting({ meetingId: meeting.id, userId: currentUser.id }));
+      dispatch(
+        leaveMeeting({
+          meetingId: meeting.id,
+          userId: currentUser.id,
+        })
+      );
       dispatch(setConnectionStatus("DISCONNECTED"));
     };
-  }, [meeting, currentUser.id, role, dispatch, canEnterDirectly, isAdmitted]);
+  }, [meeting, isAdmitted, canEnterDirectly, currentUser.id, dispatch, role]);
 
   useEffect(() => {
-    if (!meeting || meeting.status !== MEETING_STATUS.LIVE) return undefined;
+    if (!meeting || meeting.status !== MEETING_STATUS.LIVE) return;
 
     const timer = setInterval(() => {
       setSeconds((value) => value + 1);
@@ -144,9 +176,137 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
     return () => clearInterval(timer);
   }, [meeting]);
 
+  useEffect(() => {
+    if (!meetingId) return;
+
+    joinMeetingRoom(meetingId);
+
+    bindMeetingSocketEvents({
+      onUserAdmitted: () => {
+        dispatch(fetchParticipants(meetingId));
+      },
+
+      onUserLeft: () => {
+        dispatch(fetchParticipants(meetingId));
+      },
+
+      onHostDisconnected: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
+        setHostDisconnectedState({
+          active: true,
+          deadlineAt: Number(payload.deadlineAt) || Date.now() + 60000,
+        });
+      },
+
+      onHostReconnected: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
+        setHostDisconnectedState({
+          active: false,
+          deadlineAt: null,
+        });
+      },
+
+      onMeetingStarted: () => {
+        dispatch(fetchMeetingById(meetingId));
+      },
+
+      onMeetingEnded: () => {
+        navigate(basePath);
+      },
+    });
+
+    return () => {
+      leaveMeetingRoom(meetingId);
+    };
+  }, [basePath, dispatch, meetingId, navigate]);
+
+  const hostGraceSeconds =
+    hostDisconnectedState.active && hostDisconnectedState.deadlineAt
+      ? Math.max(0, Math.ceil((hostDisconnectedState.deadlineAt - Date.now()) / 1000))
+      : 0;
+
+  useEffect(() => {
+    if (!hostDisconnectedState.active) return undefined;
+    const timer = setInterval(() => {
+      setHostDisconnectedState((prev) => ({ ...prev }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [hostDisconnectedState.active]);
+
+  useEffect(() => {
+    if (!meeting?.id || !meeting?.jitsi_room_name || !jitsiContainerRef.current) return;
+    if (!isJitsiScriptReady || !window.JitsiMeetExternalAPI) return;
+
+    if (jitsiApiRef.current && initializedMeetingIdRef.current === meeting.id) {
+      return;
+    }
+
+    if (jitsiApiRef.current) {
+      jitsiApiRef.current.dispose();
+      jitsiApiRef.current = null;
+      initializedMeetingIdRef.current = null;
+    }
+
+    const computedRoomName =
+      isJaasDomain && JITSI_APP_ID
+        ? `${JITSI_APP_ID}/${meeting.jitsi_room_name}`
+        : meeting.jitsi_room_name;
+
+    const api = new window.JitsiMeetExternalAPI(JITSI_DOMAIN, {
+      roomName: computedRoomName,
+      parentNode: jitsiContainerRef.current,
+      width: "100%",
+      height: "100%",
+      jwt: JITSI_JWT || undefined,
+      userInfo: {
+        displayName: currentUser.name,
+      },
+      configOverwrite: {
+        prejoinPageEnabled: false,
+      },
+      interfaceConfigOverwrite: {
+        SHOW_JITSI_WATERMARK: false,
+      },
+    });
+
+    const handleJoined = () => {
+      dispatch(
+        joinMeeting({
+          meetingId: meeting.id,
+          userId: currentUser.id,
+        })
+      );
+    };
+
+    const handleLeft = () => {
+      dispatch(
+        leaveMeeting({
+          meetingId: meeting.id,
+          userId: currentUser.id,
+        })
+      );
+    };
+
+    api.addEventListener("videoConferenceJoined", handleJoined);
+    api.addEventListener("videoConferenceLeft", handleLeft);
+
+    jitsiApiRef.current = api;
+    initializedMeetingIdRef.current = meeting.id;
+
+    return () => {
+      api.removeEventListener("videoConferenceJoined", handleJoined);
+      api.removeEventListener("videoConferenceLeft", handleLeft);
+      api.dispose();
+      if (jitsiApiRef.current === api) {
+        jitsiApiRef.current = null;
+        initializedMeetingIdRef.current = null;
+      }
+    };
+  }, [meeting?.id, meeting?.jitsi_room_name, currentUser.id, currentUser.name, dispatch, isJitsiScriptReady]);
+
   if (!meeting) {
     return (
-      <div className={embedded ? "meeting-page meeting-page-embedded" : "meeting-page"}>
+      <div className="meeting-page">
         <div className="meeting-empty">Meeting room not found.</div>
       </div>
     );
@@ -156,7 +316,7 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
 
   if (!invited) {
     return (
-      <div className={embedded ? "meeting-page meeting-page-embedded" : "meeting-page"}>
+      <div className="meeting-page">
         <div className="meeting-empty">You are not invited to this meeting room.</div>
       </div>
     );
@@ -164,9 +324,10 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
 
   if (meeting.status !== MEETING_STATUS.LIVE) {
     return (
-      <div className={embedded ? "meeting-page meeting-page-embedded" : "meeting-page"}>
+      <div className="meeting-page">
         <div className="meeting-empty">Join is enabled only when the meeting is LIVE.</div>
-        <Link className="meeting-btn meeting-btn-secondary" to={`${basePath}/${meeting.id}`} style={{ marginTop: 16 }}>
+
+        <Link className="meeting-btn meeting-btn-secondary" to={`${basePath}/${meeting.id}`}>
           Back to Details
         </Link>
       </div>
@@ -178,7 +339,13 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
   }
 
   const leaveRoom = () => {
-    dispatch(leaveMeeting({ meetingId: meeting.id, userId: currentUser.id }));
+    dispatch(
+      leaveMeeting({
+        meetingId: meeting.id,
+        userId: currentUser.id,
+      })
+    );
+
     dispatch(setConnectionStatus("DISCONNECTED"));
     navigate(`${basePath}/${meeting.id}`);
   };
@@ -187,162 +354,62 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
   };
 
-  // Current user's mic/camera state
-  const selfParticipant = participants.find((p) => Number(p.userId) === Number(currentUser.id));
-  const micOn = selfParticipant?.micOn !== false;
-  const cameraOn = selfParticipant?.cameraOn !== false;
-
-  const handleToggleMic = () => {
-    dispatch(toggleMic({ meetingId: meeting.id, userId: currentUser.id }));
-  };
-
-  const handleToggleCamera = () => {
-    dispatch(toggleCamera({ meetingId: meeting.id, userId: currentUser.id }));
-  };
-
-  // Grid class based on participant count
-  const tileCount = participantViews.length;
-  let gridClass = "mr-grid-1";
-  if (tileCount === 2) gridClass = "mr-grid-2";
-  else if (tileCount >= 3 && tileCount <= 4) gridClass = "mr-grid-4";
-  else if (tileCount >= 5 && tileCount <= 6) gridClass = "mr-grid-6";
-  else if (tileCount >= 7) gridClass = "mr-grid-many";
-
   const roomUI = (
     <div className="mr-fullscreen">
-      {/* Briefing banner */}
-      {isBriefing ? <BriefingBanner active /> : null}
+      {isBriefing && <BriefingBanner active />}
 
-      {/* Main content area */}
+      {hostDisconnectedState.active ? (
+        <div className="meeting-host-disconnected-banner">
+          Host disconnected. Waiting for reconnection...
+          {hostGraceSeconds > 0 ? ` (${hostGraceSeconds}s)` : ""}
+        </div>
+      ) : null}
+
       <div className="mr-video-wrap">
-        {/* Video / participant grid area */}
         <div className="mr-video">
-          {participantViews.length === 0 ? (
-            <div className="mr-empty-room">
-              <div className="mr-empty-icon">
-                <Video size={48} strokeWidth={1} />
-              </div>
-              <h3>Waiting for participants...</h3>
-              <p>Share the meeting link to invite others</p>
-              <div className="mr-empty-meeting-info">
-                <span>{meeting.title}</span>
-              </div>
-            </div>
-          ) : (
-            <div className={`mr-tile-grid ${gridClass}`}>
-              {participantViews.map((p) => (
-                <ParticipantTile
-                  key={p.userId}
-                  participant={p}
-                  isCurrentUser={Number(p.userId) === Number(currentUser.id)}
-                  isSpeaker={p.isHost}
-                />
-              ))}
-            </div>
-          )}
+          <div
+            ref={jitsiContainerRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              background: "#000",
+            }}
+          />
         </div>
 
-        {/* Slide-out drawer */}
-        {activePanel ? (
+        {authority && activePanel === "controls" ? (
           <div className="mr-drawer">
             <div className="mr-drawer-header">
-              <h3>
-                {activePanel === "participants" ? `Participants (${participantViews.length})` : null}
-                {activePanel === "chat" ? "Chat" : null}
-                {activePanel === "controls" ? "Host Controls" : null}
-              </h3>
+              <h3>Host Controls</h3>
               <button className="mr-drawer-close" onClick={() => setActivePanel(null)}>
                 <X size={18} />
               </button>
             </div>
 
             <div className="mr-drawer-body">
-              {activePanel === "participants" ? (
-                <div className="mr-participant-list">
-                  {participantViews.length === 0 ? (
-                    <div className="meeting-empty-inline" style={{ padding: 20, textAlign: "center" }}>
-                      No participants yet.
-                    </div>
-                  ) : (
-                    participantViews.map((participant) => (
-                      <div key={participant.userId} className="mr-participant-item">
-                        <div className="meeting-avatar-sm" style={{ background: getTileColor(participant.userId) }}>
-                          {getInitials(participant.user.name)}
-                        </div>
-                        <div className="mr-participant-detail">
-                          <strong>
-                            {Number(participant.userId) === Number(currentUser.id) ? "You" : participant.user.name}
-                          </strong>
-                          {participant.isHost ? <span className="meeting-host-chip">Host</span> : null}
-                        </div>
-                        <span className="meeting-user-role">{participant.user.role}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              ) : null}
-
-              {activePanel === "chat" ? (
-                <MeetingChat />
-              ) : null}
-
-              {activePanel === "controls" ? (
                 <div className="mr-controls-content">
-                  <AuthorityControlPanel meeting={meeting} basePath={basePath} />
-                  <WaitingRoomPanel meetingId={meeting.id} />
-                </div>
-              ) : null}
+                <AuthorityControlPanel
+                  meeting={meeting}
+                  basePath={basePath}
+                  canToggleBriefing={host}
+                />
+                <WaitingRoomPanel meetingId={meeting.id} />
+              </div>
             </div>
           </div>
         ) : null}
       </div>
 
-      {/* Bottom toolbar */}
       <div className="mr-toolbar">
         <div className="mr-toolbar-left">
           <span className="mr-meeting-title">{meeting.title}</span>
           <span className="mr-divider" />
           <span className="mr-timer">{formatTimer(seconds)}</span>
-          <span className="meeting-status-badge meeting-status-live">LIVE</span>
-          {isBriefing ? <span className="meeting-status-badge meeting-status-briefing">Briefing</span> : null}
         </div>
 
         <div className="mr-toolbar-center">
-          <button
-            className={`mr-media-btn ${!micOn ? "mr-media-off" : ""}`}
-            onClick={handleToggleMic}
-            title={micOn ? "Mute" : "Unmute"}
-          >
-            {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-          </button>
-          <button
-            className={`mr-media-btn ${!cameraOn ? "mr-media-off" : ""}`}
-            onClick={handleToggleCamera}
-            title={cameraOn ? "Turn off camera" : "Turn on camera"}
-          >
-            {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-          </button>
-          <span className="mr-divider" />
-          <button
-            className={`mr-tool-btn ${activePanel === "participants" ? "active" : ""}`}
-            onClick={() => togglePanel("participants")}
-            title={`Participants (${participantViews.length})`}
-          >
-            <Users size={20} />
-          </button>
-          <button
-            className={`mr-tool-btn ${activePanel === "chat" ? "active" : ""}`}
-            onClick={() => togglePanel("chat")}
-            title="Chat"
-          >
-            <MessageSquare size={20} />
-          </button>
           {authority ? (
-            <button
-              className={`mr-tool-btn ${activePanel === "controls" ? "active" : ""}`}
-              onClick={() => togglePanel("controls")}
-              title="Host Controls"
-            >
+            <button className="mr-tool-btn" onClick={() => togglePanel("controls")} title="Host Controls">
               <Shield size={20} />
               {waitingRoom.length > 0 ? (
                 <span className="mr-tool-badge">{waitingRoom.length}</span>
@@ -361,8 +428,6 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
     </div>
   );
 
-  // Portal to document.body so the room escapes any parent layout
-  // (sidebar, max-width constraints, position:relative overrides)
   return createPortal(roomUI, document.body);
 };
 

@@ -1,9 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { meetingApi } from "../api/meetingApi";
 
-// ── LocalStorage fallback helpers ──
-// Used when the backend is not yet available
-
 const STORAGE_KEY = "ncc_meetings";
 const PARTICIPANTS_KEY = "ncc_meeting_participants";
 
@@ -19,9 +16,7 @@ const loadMeetings = () => {
 const saveMeetings = (meetings) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(meetings));
-  } catch {
-    // storage full or unavailable — ignore
-  }
+  } catch {}
 };
 
 const loadParticipants = () => {
@@ -36,360 +31,306 @@ const loadParticipants = () => {
 const saveParticipants = (participants) => {
   try {
     localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(participants));
-  } catch {
-    // ignore
-  }
+  } catch {}
 };
 
-const generateId = () => `mtg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-// ── Async Thunks — try API first, fall back to localStorage ──
-
-export const fetchMeetings = createAsyncThunk(
-  "meetings/fetchMeetings",
-  async () => {
-    try {
-      const response = await meetingApi.listMeetings();
-      return { source: "api", meetings: response.data };
-    } catch {
-      return { source: "local", meetings: loadMeetings() };
-    }
+export const fetchMeetings = createAsyncThunk("meetings/fetchMeetings", async () => {
+  try {
+    const response = await meetingApi.listMeetings();
+    return response.data || [];
+  } catch {
+    return loadMeetings();
   }
-);
+});
 
 export const fetchMeetingById = createAsyncThunk(
   "meetings/fetchMeetingById",
   async (meetingId) => {
-    try {
-      const response = await meetingApi.getMeetingById(meetingId);
-      return { source: "api", meeting: response.data };
-    } catch {
-      const all = loadMeetings();
-      const found = all.find((m) => m.id === String(meetingId));
-      return { source: "local", meeting: found || null };
-    }
+    const response = await meetingApi.getMeetingById(meetingId);
+    return {
+      meeting: response.data?.meeting || null,
+      participants: response.data?.participants || [],
+    };
   }
 );
 
 export const createMeetingAsync = createAsyncThunk(
   "meetings/createMeeting",
   async (payload) => {
-    try {
-      const response = await meetingApi.createMeeting(payload);
-      return { source: "api", meeting: response.data };
-    } catch {
-      // Fallback: save to localStorage
-      const meeting = {
-        id: generateId(),
-        title: payload.title || "",
-        description: payload.description || "",
-        dateTime: payload.dateTime || null,
-        meetingType: payload.meetingType || "General",
-        invitedUserIds: Array.isArray(payload.invitedUserIds) ? payload.invitedUserIds : [],
-        createdBy: payload.createdBy || payload.invitedUserIds?.[0] || 0,
-        status: "SCHEDULED",
-        restricted: payload.restricted || false,
-        createdAt: new Date().toISOString(),
-      };
-      const all = loadMeetings();
-      all.unshift(meeting);
-      saveMeetings(all);
-      return { source: "local", meeting };
-    }
+    const response = await meetingApi.createMeeting(payload);
+    return response.data;
   }
 );
 
 export const updateMeetingStatusAsync = createAsyncThunk(
   "meetings/updateMeetingStatus",
   async ({ meetingId, status }) => {
-    try {
-      const response = await meetingApi.updateMeetingStatus({ meetingId, status });
-      return { source: "api", meeting: response.data };
-    } catch {
-      // Fallback: update in localStorage
-      const all = loadMeetings();
-      const idx = all.findIndex((m) => m.id === String(meetingId));
-      if (idx >= 0) {
-        all[idx] = { ...all[idx], status };
-        if (status === "LIVE") all[idx].startedAt = new Date().toISOString();
-        if (status === "ENDED") all[idx].endedAt = new Date().toISOString();
-        saveMeetings(all);
-        return { source: "local", meeting: all[idx] };
-      }
-      return { source: "local", meeting: { id: meetingId, status } };
-    }
+    const response = await meetingApi.updateMeetingStatus({ meetingId, status });
+    return response.data;
+  }
+);
+
+export const requestAdmissionAsync = createAsyncThunk(
+  "meetings/requestAdmission",
+  async ({ meetingId }) => {
+    const response = await meetingApi.requestAdmission({ meetingId });
+    return {
+      meetingId: String(meetingId),
+      payload: response.data || {},
+    };
   }
 );
 
 export const joinMeetingAsync = createAsyncThunk(
   "meetings/joinMeeting",
-  async ({ meetingId, userId }) => {
-    try {
-      const response = await meetingApi.joinMeeting({ meetingId });
-      return { source: "api", meetingId, participant: response.data };
-    } catch {
-      const allP = loadParticipants();
-      const list = allP[meetingId] || [];
-      const exists = list.some((p) => Number(p.userId) === Number(userId));
-      if (!exists) {
-        list.push({ userId: Number(userId), joinedAt: new Date().toISOString(), micOn: true, cameraOn: true });
-      }
-      allP[meetingId] = list;
-      saveParticipants(allP);
-      return { source: "local", meetingId, participant: { userId: Number(userId), joinedAt: new Date().toISOString() } };
-    }
+  async ({ meetingId }) => {
+    const response = await meetingApi.joinMeeting({ meetingId });
+    return {
+      meetingId: String(meetingId),
+      payload: response.data || {},
+    };
   }
 );
 
 export const leaveMeetingAsync = createAsyncThunk(
   "meetings/leaveMeeting",
   async ({ meetingId, userId }) => {
-    try {
-      await meetingApi.leaveMeeting({ meetingId });
-      return { source: "api", meetingId, participant: { userId: Number(userId) } };
-    } catch {
-      const allP = loadParticipants();
-      allP[meetingId] = (allP[meetingId] || []).filter((p) => Number(p.userId) !== Number(userId));
-      saveParticipants(allP);
-      return { source: "local", meetingId, participant: { userId: Number(userId) } };
-    }
+    await meetingApi.leaveMeeting({ meetingId });
+    return {
+      meetingId: String(meetingId),
+      userId: Number(userId),
+    };
   }
 );
 
 export const fetchParticipants = createAsyncThunk(
   "meetings/fetchParticipants",
   async (meetingId) => {
-    try {
-      const response = await meetingApi.getParticipants(meetingId);
-      return { source: "api", meetingId, participants: response.data };
-    } catch {
-      const allP = loadParticipants();
-      return { source: "local", meetingId, participants: allP[meetingId] || [] };
-    }
+    const response = await meetingApi.getParticipants(meetingId);
+    return {
+      meetingId: String(meetingId),
+      participants: response.data || [],
+    };
+  }
+);
+
+export const fetchWaitingList = createAsyncThunk(
+  "meetings/fetchWaitingList",
+  async (meetingId) => {
+    const response = await meetingApi.getWaitingList(meetingId);
+    return {
+      meetingId: String(meetingId),
+      waiting: response.data || [],
+    };
+  }
+);
+
+export const admitUserAsync = createAsyncThunk(
+  "meetings/admitUser",
+  async ({ meetingId, waitingId }) => {
+    const response = await meetingApi.admitUser({ meetingId, waitingId });
+    return {
+      meetingId: String(meetingId),
+      waitingId: Number(waitingId),
+      userId: Number(response.data?.userId || 0),
+    };
+  }
+);
+
+export const rejectUserAsync = createAsyncThunk(
+  "meetings/rejectUser",
+  async ({ meetingId, waitingId }) => {
+    const response = await meetingApi.rejectUser({ meetingId, waitingId });
+    return {
+      meetingId: String(meetingId),
+      waitingId: Number(waitingId),
+      userId: Number(response.data?.userId || 0),
+    };
   }
 );
 
 export const fetchMeetingReport = createAsyncThunk(
   "meetings/fetchMeetingReport",
   async (meetingId) => {
-    try {
-      const response = await meetingApi.getMeetingReport(meetingId);
-      const report = response.data?.data || response.data;
-      return { source: "api", meetingId, report };
-    } catch {
-      // Fallback: generate report from localStorage
-      const allP = loadParticipants();
-      const participants = allP[meetingId] || [];
-      const all = loadMeetings();
-      const meeting = all.find((m) => m.id === String(meetingId));
-      const invited = meeting?.invitedUserIds || [];
-      return {
-        source: "local",
-        meetingId,
-        report: {
-          totalInvited: invited.length,
-          totalPresent: participants.length,
-          totalAbsent: Math.max(0, invited.length - participants.length),
-          attendancePercent: invited.length > 0 ? Math.round((participants.length / invited.length) * 100) : 0,
-          participants,
+    const response = await meetingApi.getMeetingReport(meetingId);
+    const payload = response.data || {};
+
+    return {
+      meetingId: String(meetingId),
+      report: {
+        summary: {
+          totalInvited: Number(payload.report?.total_invited || 0),
+          totalPresent: Number(payload.report?.total_present || 0),
+          totalAbsent: Number(payload.report?.total_absent || 0),
+          attendancePercent: Number(payload.report?.attendance_percentage || 0),
+          lateCount: Number(payload.report?.late_count || 0),
+          avgDuration: Number(payload.report?.average_duration_minutes || 0),
         },
-      };
-    }
+        attendance: Array.isArray(payload.attendance)
+          ? payload.attendance.map((row, index) => ({
+              userId: Number(row.user_id || index + 1),
+              name: row.full_name || "Unknown",
+              role: row.rank_name || "Cadet",
+              duration: Number(row.total_duration_minutes || 0),
+              percentAttended: Number(row.percentage_attended || 0),
+              status: row.attendance_status || "ABSENT",
+              late: Boolean(row.was_late),
+            }))
+          : [],
+      },
+    };
   }
 );
-
-// ── Slice ──
 
 const initialState = {
   meetings: loadMeetings(),
   currentMeeting: null,
   participants: loadParticipants(),
-  reports: {},
-  isHost: false,
-  meetingStatus: "IDLE",
-  connectionStatus: "DISCONNECTED",
-  loading: false,
-  error: null,
   waitingRoom: {},
   admittedUsers: {},
+  reports: {},
   briefingMode: {},
+  connectionStatus: "DISCONNECTED",
+  meetingStatus: "IDLE",
+  loading: false,
+  error: null,
 };
-
-const updateParticipant = (state, meetingId, userId, updater) => {
-  const list = state.participants[meetingId] || [];
-  state.participants[meetingId] = list.map((p) => {
-    if (Number(p.userId) !== Number(userId)) return p;
-    return updater(p);
-  });
-};
-
-const persistMeetings = (state) => saveMeetings(state.meetings);
-const persistParticipants = (state) => saveParticipants(state.participants);
 
 const meetingsSlice = createSlice({
   name: "meetings",
   initialState,
   reducers: {
-    addMeeting(state, action) {
-      const meeting = action.payload;
-      const exists = state.meetings.some((m) => m.id === meeting.id);
-      if (!exists) {
-        state.meetings.unshift(meeting);
-        persistMeetings(state);
-      }
-    },
     editMeeting(state, action) {
-      const { meetingId, updates } = action.payload;
+      const { meetingId, updates } = action.payload || {};
       state.meetings = state.meetings.map((m) =>
         m.id === meetingId ? { ...m, ...updates } : m
       );
-      if (state.currentMeeting?.id === meetingId) {
-        state.currentMeeting = { ...state.currentMeeting, ...updates };
-      }
-      persistMeetings(state);
+      saveMeetings(state.meetings);
     },
+
     deleteMeeting(state, action) {
-      const { meetingId } = action.payload;
+      const { meetingId } = action.payload || {};
       state.meetings = state.meetings.filter((m) => m.id !== meetingId);
       delete state.participants[meetingId];
       delete state.waitingRoom[meetingId];
       delete state.admittedUsers[meetingId];
-      delete state.briefingMode[meetingId];
-      persistMeetings(state);
-      persistParticipants(state);
+      delete state.reports[meetingId];
+      saveMeetings(state.meetings);
+      saveParticipants(state.participants);
     },
-    setCurrentMeeting(state, action) {
-      const { meetingId, userId } = action.payload || {};
-      const found = state.meetings.find((m) => m.id === meetingId) || null;
-      state.currentMeeting = found;
-      state.isHost = Boolean(found && Number(found.createdBy) === Number(userId));
-      state.meetingStatus = found ? found.status : "IDLE";
-    },
+
     updateMeetingStatus(state, action) {
-      const { meetingId, status } = action.payload;
+      const { meetingId, status } = action.payload || {};
       state.meetings = state.meetings.map((m) =>
-        m.id === meetingId ? { ...m, status } : m
+        m.id === String(meetingId) ? { ...m, status } : m
       );
-      if (state.currentMeeting?.id === meetingId) {
+      if (state.currentMeeting?.id === String(meetingId)) {
         state.currentMeeting = { ...state.currentMeeting, status };
       }
-      state.meetingStatus = status;
-      persistMeetings(state);
+      state.meetingStatus = status || state.meetingStatus;
+      saveMeetings(state.meetings);
     },
-    joinMeeting(state, action) {
-      const { meetingId, userId } = action.payload;
-      const list = state.participants[meetingId] || [];
-      const exists = list.some((p) => Number(p.userId) === Number(userId));
+
+    requestAdmission(state, action) {
+      const { meetingId, userId, name, role } = action.payload || {};
+      const key = String(meetingId);
+      const queue = state.waitingRoom[key] || [];
+      const exists = queue.some((item) => Number(item.userId) === Number(userId));
       if (!exists) {
-        list.push({ userId, micOn: true, cameraOn: true, joinedAt: new Date().toISOString() });
+        queue.push({
+          waitingId: Number(userId),
+          userId: Number(userId),
+          name: name || `User #${userId}`,
+          role: role || "Cadet",
+          requestedAt: new Date().toISOString(),
+        });
       }
-      state.participants[meetingId] = list;
-      state.connectionStatus = "CONNECTED";
-      persistParticipants(state);
+      state.waitingRoom[key] = queue;
     },
-    leaveMeeting(state, action) {
-      const { meetingId, userId } = action.payload;
-      state.participants[meetingId] = (state.participants[meetingId] || []).filter(
-        (p) => Number(p.userId) !== Number(userId)
-      );
-      state.connectionStatus = "DISCONNECTED";
-      persistParticipants(state);
+
+    setCurrentMeeting(state, action) {
+      const { meetingId } = action.payload || {};
+      state.currentMeeting =
+        state.meetings.find((m) => m.id === String(meetingId)) || null;
     },
-    toggleMic(state, action) {
-      const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (p) => ({ ...p, micOn: !p.micOn }));
-    },
-    toggleCamera(state, action) {
-      const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (p) => ({ ...p, cameraOn: !p.cameraOn }));
-    },
-    muteParticipant(state, action) {
-      const { meetingId, userId } = action.payload;
-      updateParticipant(state, meetingId, userId, (p) => ({ ...p, micOn: false }));
-    },
-    removeParticipant(state, action) {
-      const { meetingId, userId } = action.payload;
-      state.participants[meetingId] = (state.participants[meetingId] || []).filter(
-        (p) => Number(p.userId) !== Number(userId)
-      );
-    },
+
     setConnectionStatus(state, action) {
       state.connectionStatus = action.payload;
     },
-    requestAdmission(state, action) {
-      const { meetingId, userId, name, role } = action.payload;
-      const queue = state.waitingRoom[meetingId] || [];
-      const exists = queue.some((r) => Number(r.userId) === Number(userId));
+
+    joinMeeting(state, action) {
+      const { meetingId, userId, user = null } = action.payload;
+      const key = String(meetingId);
+      const list = state.participants[key] || [];
+      const exists = list.some((p) => Number(p.userId) === Number(userId));
+
       if (!exists) {
-        queue.push({ userId, name, role, requestedAt: new Date().toISOString() });
+        list.push({
+          userId: Number(userId),
+          joinedAt: new Date().toISOString(),
+          leftAt: null,
+          user,
+        });
       }
-      state.waitingRoom[meetingId] = queue;
+
+      state.participants[key] = list;
+      saveParticipants(state.participants);
     },
-    admitUser(state, action) {
+
+    leaveMeeting(state, action) {
       const { meetingId, userId } = action.payload;
-      state.waitingRoom[meetingId] = (state.waitingRoom[meetingId] || []).filter(
-        (r) => Number(r.userId) !== Number(userId)
+      const key = String(meetingId);
+
+      state.participants[key] = (state.participants[key] || []).filter(
+        (p) => Number(p.userId) !== Number(userId)
       );
-      const admitted = state.admittedUsers[meetingId] || [];
-      if (!admitted.includes(Number(userId))) {
-        admitted.push(Number(userId));
-      }
-      state.admittedUsers[meetingId] = admitted;
+
+      saveParticipants(state.participants);
     },
-    rejectUser(state, action) {
-      const { meetingId, userId } = action.payload;
-      state.waitingRoom[meetingId] = (state.waitingRoom[meetingId] || []).filter(
-        (r) => Number(r.userId) !== Number(userId)
-      );
-    },
+
     toggleBriefingMode(state, action) {
       const { meetingId } = action.payload;
-      state.briefingMode[meetingId] = !state.briefingMode[meetingId];
+      const key = String(meetingId);
+      state.briefingMode[key] = !state.briefingMode[key];
     },
   },
+
   extraReducers: (builder) => {
-    // fetchMeetings
-    builder.addCase(fetchMeetings.pending, (state) => {
-      state.loading = true;
-      state.error = null;
-    });
     builder.addCase(fetchMeetings.fulfilled, (state, action) => {
       state.loading = false;
-      const { meetings, source } = action.payload;
-      state.meetings = meetings;
-      if (source === "api") persistMeetings(state);
-    });
-    builder.addCase(fetchMeetings.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.payload;
+      state.meetings = action.payload || [];
+      saveMeetings(state.meetings);
     });
 
-    // fetchMeetingById
     builder.addCase(fetchMeetingById.fulfilled, (state, action) => {
-      const { meeting, source } = action.payload;
-      if (!meeting) return;
+      state.loading = false;
+      const meeting = action.payload?.meeting;
+      const participants = action.payload?.participants || [];
+      if (!meeting?.id) return;
+
       const idx = state.meetings.findIndex((m) => m.id === meeting.id);
-      if (idx >= 0) {
-        state.meetings[idx] = meeting;
-      } else {
-        state.meetings.push(meeting);
-      }
-      if (source === "api") persistMeetings(state);
+      if (idx >= 0) state.meetings[idx] = meeting;
+      else state.meetings.unshift(meeting);
+
+      state.participants[meeting.id] = participants;
+      saveMeetings(state.meetings);
+      saveParticipants(state.participants);
     });
 
-    // createMeetingAsync
     builder.addCase(createMeetingAsync.fulfilled, (state, action) => {
-      const { meeting, source } = action.payload;
-      const exists = state.meetings.some((m) => m.id === meeting.id);
-      if (!exists) {
+      state.loading = false;
+      const meeting = action.payload;
+      if (meeting?.id) {
         state.meetings.unshift(meeting);
+        saveMeetings(state.meetings);
       }
-      if (source === "api") persistMeetings(state);
     });
 
-    // updateMeetingStatusAsync
     builder.addCase(updateMeetingStatusAsync.fulfilled, (state, action) => {
-      const { meeting } = action.payload;
+      state.loading = false;
+      const meeting = action.payload;
+      if (!meeting?.id) return;
+
       state.meetings = state.meetings.map((m) =>
         m.id === meeting.id ? meeting : m
       );
@@ -397,60 +338,107 @@ const meetingsSlice = createSlice({
         state.currentMeeting = meeting;
       }
       state.meetingStatus = meeting.status;
-      persistMeetings(state);
+      saveMeetings(state.meetings);
     });
 
-    // joinMeetingAsync
-    builder.addCase(joinMeetingAsync.fulfilled, (state, action) => {
-      const { meetingId, participant } = action.payload;
-      const list = state.participants[meetingId] || [];
-      const exists = list.some((p) => Number(p.userId) === Number(participant.userId));
-      if (!exists) {
-        list.push(participant);
-      }
-      state.participants[meetingId] = list;
-      state.connectionStatus = "CONNECTED";
-    });
-
-    // leaveMeetingAsync
-    builder.addCase(leaveMeetingAsync.fulfilled, (state, action) => {
-      const { meetingId, participant } = action.payload;
-      state.participants[meetingId] = (state.participants[meetingId] || []).filter(
-        (p) => Number(p.userId) !== Number(participant.userId)
-      );
-      state.connectionStatus = "DISCONNECTED";
-    });
-
-    // fetchParticipants
     builder.addCase(fetchParticipants.fulfilled, (state, action) => {
+      state.loading = false;
       const { meetingId, participants } = action.payload;
-      state.participants[meetingId] = participants;
+      state.participants[meetingId] = participants || [];
+      saveParticipants(state.participants);
     });
 
-    // fetchMeetingReport
+    builder.addCase(fetchWaitingList.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetingId, waiting } = action.payload;
+      state.waitingRoom[meetingId] = (waiting || []).map((u) => ({
+        waitingId: Number(u.waiting_id),
+        userId: Number(u.user_id),
+        name: u.full_name || "Unknown",
+        role: u.rank_name || "Cadet",
+        requestedAt: u.request_time,
+      }));
+    });
+
+    builder.addCase(admitUserAsync.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetingId, waitingId, userId } = action.payload;
+      state.waitingRoom[meetingId] =
+        (state.waitingRoom[meetingId] || []).filter(
+          (u) => Number(u.waitingId) !== Number(waitingId)
+        );
+
+      if (!state.admittedUsers[meetingId]) {
+        state.admittedUsers[meetingId] = [];
+      }
+      if (userId > 0 && !state.admittedUsers[meetingId].includes(userId)) {
+        state.admittedUsers[meetingId].push(userId);
+      }
+    });
+
+    builder.addCase(rejectUserAsync.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetingId, waitingId } = action.payload;
+      state.waitingRoom[meetingId] =
+        (state.waitingRoom[meetingId] || []).filter(
+          (u) => Number(u.waitingId) !== Number(waitingId)
+        );
+    });
+
     builder.addCase(fetchMeetingReport.fulfilled, (state, action) => {
+      state.loading = false;
       const { meetingId, report } = action.payload;
       state.reports[meetingId] = report;
     });
+
+    builder.addCase(requestAdmissionAsync.fulfilled, (state) => {
+      state.loading = false;
+    });
+
+    builder.addCase(joinMeetingAsync.fulfilled, (state) => {
+      state.loading = false;
+    });
+
+    builder.addCase(leaveMeetingAsync.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetingId, userId } = action.payload;
+      state.participants[meetingId] = (state.participants[meetingId] || []).filter(
+        (p) => Number(p.userId) !== Number(userId)
+      );
+      saveParticipants(state.participants);
+    });
+
+    builder
+      .addMatcher(
+        (action) =>
+          action.type.startsWith("meetings/") &&
+          action.type.endsWith("/pending"),
+        (state) => {
+          state.loading = true;
+          state.error = null;
+        }
+      )
+      .addMatcher(
+        (action) =>
+          action.type.startsWith("meetings/") &&
+          action.type.endsWith("/rejected"),
+        (state, action) => {
+          state.loading = false;
+          state.error = action.error?.message || "Request failed";
+        }
+      );
   },
 });
 
 export const {
-  addMeeting,
   editMeeting,
   deleteMeeting,
-  setCurrentMeeting,
   updateMeetingStatus,
+  requestAdmission,
+  setCurrentMeeting,
+  setConnectionStatus,
   joinMeeting,
   leaveMeeting,
-  toggleMic,
-  toggleCamera,
-  muteParticipant,
-  removeParticipant,
-  setConnectionStatus,
-  requestAdmission,
-  admitUser,
-  rejectUser,
   toggleBriefingMode,
 } = meetingsSlice.actions;
 

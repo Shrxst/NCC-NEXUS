@@ -8,6 +8,7 @@ const { Server } = require("socket.io");
 const { initChatSocket } = require("./sockets/chat.socket");
 const { initFeedSocket } = require("./sockets/feed.socket");
 const { initNotificationSocket } = require("./sockets/notification.socket");
+const { initMeetingSocket } = require("./sockets/meeting.socket");
 const db = require("./db/knex");
 
 const authRoutes = require("./routes/auth.routes");
@@ -21,6 +22,8 @@ const attendanceRoutes = require("./modules/attendance/attendance.routes");
 const quizRoutes = require("./modules/quiz/routes/quiz.routes");
 const leaveRoutes = require("./modules/leave/leave.routes");
 const meetingRoutes = require("./modules/meetings/meeting.routes");
+const communityRoutes = require("./modules/community/community.routes");
+const { startCommunityPollNotifier } = require("./modules/community/community.poll-notifier");
 
 const app = express();
 const server = http.createServer(app);
@@ -37,9 +40,12 @@ app.locals.io = io;
 app.locals.onlineUsers = new Set();
 
 // Initialize chat socket
+// Initialize sockets
 initChatSocket(io, { onlineUsers: app.locals.onlineUsers });
 initFeedSocket(io);
 initNotificationSocket(io);
+initMeetingSocket(io);
+startCommunityPollNotifier(io);
 
 // ------------------------------------------
 // 6. Middleware
@@ -81,9 +87,19 @@ app.use("/api/quiz", quizRoutes);
 app.use("/api/leave", leaveRoutes);
 app.use("/api/meetings", meetingRoutes);
 app.use("/api/donations", donationRoutes);
+app.use("/api/community", communityRoutes);
 // 9. Global Error Handler
 // ------------------------------------------
 app.use((err, req, res, next) => {
+  if (err?.name === "MulterError") {
+    const status = err.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Uploaded file exceeds 10MB limit"
+        : err.message || "Upload error";
+    return res.status(status).json({ message });
+  }
+
   const status = Number(err.status || err.statusCode || 500);
   const message = status >= 500 ? "Internal Server Error" : err.message;
   console.error("Global Error:", err.stack || err);
