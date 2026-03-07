@@ -1,6 +1,7 @@
 const { z } = require("zod");
 
 const leaveApplySchema = z.object({
+  drill_id: z.coerce.number().int().positive(),
   reason: z.string().trim().min(5).max(2000),
 });
 
@@ -9,7 +10,7 @@ const leaveStatusSchema = z.object({
 });
 
 const leaveParamsSchema = z.object({
-  id: z.string().uuid(),
+  id: z.coerce.number().int().positive(),
 });
 
 const parseOrThrow = (schema, payload) => {

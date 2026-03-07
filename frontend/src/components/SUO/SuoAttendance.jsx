@@ -3,9 +3,7 @@ import { Download, Plus, Trash2, ClipboardList, Check, X, ChevronDown, ChevronUp
 import "./suoAttendance.css";
 import { attendanceApi } from "../../api/attendanceApi";
 import { leaveApi } from "../../api/leaveApi";
-
-const SESSION_FINE_STORAGE_KEY = "ncc_suo_session_fine_v1";
-const PENALTY_RECORD_STORAGE_KEY = "ncc_suo_penalty_records_v1";
+import { fineApi } from "../../api/fineApi";
 
 const calculateAttendance = (attendance, totalDrills) => {
   const attended = attendance.filter((v) => v === "P").length;
@@ -87,23 +85,6 @@ const getDrillSortValue = (drill = {}) => {
   return Number.isNaN(scheduledAt) ? 0 : scheduledAt;
 };
 
-const loadJsonFromStorage = (key, fallbackValue = {}) => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallbackValue;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : fallbackValue;
-  } catch {
-    return fallbackValue;
-  }
-};
-
-const parseFineAmount = (value) => {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount < 0) return null;
-  return Math.round(amount * 100) / 100;
-};
-
 const getLeaveStatusForCadetDrill = (leaveRequests, cadetRegimentalNo, drillId) => {
   const normalizedCadetRegNo = String(cadetRegimentalNo || "");
   const normalizedDrillId = String(drillId || "");
@@ -126,12 +107,8 @@ const SuoAttendance = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
-  const [sessionFineById, setSessionFineById] = useState(() =>
-    loadJsonFromStorage(SESSION_FINE_STORAGE_KEY, {})
-  );
-  const [penaltyRecordsBySession, setPenaltyRecordsBySession] = useState(() =>
-    loadJsonFromStorage(PENALTY_RECORD_STORAGE_KEY, {})
-  );
+  const [fines, setFines] = useState([]);
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState(null);
 
   const nextDrillDate = useMemo(() => {
     const today = new Date();
@@ -140,16 +117,15 @@ const SuoAttendance = () => {
     const dd = String(today.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd} 09:00`;
   }, []);
-  const selectedSessionFine = Number(sessionFineById?.[String(selectedSessionId)] || 0);
-  const currentSessionPenaltyRecords = penaltyRecordsBySession?.[String(selectedSessionId)] || {};
-
-  useEffect(() => {
-    localStorage.setItem(SESSION_FINE_STORAGE_KEY, JSON.stringify(sessionFineById));
-  }, [sessionFineById]);
-
-  useEffect(() => {
-    localStorage.setItem(PENALTY_RECORD_STORAGE_KEY, JSON.stringify(penaltyRecordsBySession));
-  }, [penaltyRecordsBySession]);
+  const pendingFineMap = useMemo(() => {
+    const map = new Map();
+    fines
+      .filter((fine) => fine.status === "pending")
+      .forEach((fine) => {
+        map.set(`${fine.regimental_no}:${fine.drill_id}`, Number(fine.amount || 0));
+      });
+    return map;
+  }, [fines]);
 
   const loadLeaveRequests = async () => {
     try {
@@ -188,6 +164,17 @@ const SuoAttendance = () => {
     }
   };
 
+  const loadFines = async () => {
+    try {
+      const res = await fineApi.getAll();
+      setFines(Array.isArray(res?.data?.data) ? res.data.data : []);
+    } catch (err) {
+      setFines([]);
+      const serverMessage = err?.response?.data?.message;
+      if (serverMessage) setError(serverMessage);
+    }
+  };
+
   const loadSessionDetail = async (sessionId) => {
     if (!sessionId) return;
     setLoading(true);
@@ -205,6 +192,7 @@ const SuoAttendance = () => {
   useEffect(() => {
     loadSessions();
     loadLeaveRequests();
+    loadFines();
   }, []);
 
   useEffect(() => {
@@ -238,20 +226,8 @@ const SuoAttendance = () => {
     setError("");
     try {
       await attendanceApi.deleteSession(selectedSessionId);
-      const sessionKey = String(selectedSessionId);
-      setSessionFineById((prev) => {
-        if (!Object.prototype.hasOwnProperty.call(prev, sessionKey)) return prev;
-        const next = { ...prev };
-        delete next[sessionKey];
-        return next;
-      });
-      setPenaltyRecordsBySession((prev) => {
-        if (!Object.prototype.hasOwnProperty.call(prev, sessionKey)) return prev;
-        const next = { ...prev };
-        delete next[sessionKey];
-        return next;
-      });
       await loadSessions();
+      await loadFines();
     } catch (err) {
       window.alert(err?.response?.data?.message || "Unable to delete session.");
     } finally {
@@ -303,12 +279,7 @@ const SuoAttendance = () => {
 
   const updateAttendanceStatus = async (cadetRegimentalNo, drillId, nextUiStatus) => {
     const backendStatus = nextUiStatus === "P" ? "P" : "A";
-    const penaltyType = nextUiStatus === "AP" ? "AP" : nextUiStatus === "A" ? "A" : null;
     const prev = sessionDetail;
-    const prevPenaltyRecords = penaltyRecordsBySession;
-    const sessionKey = String(selectedSessionId);
-    const cadetKey = String(cadetRegimentalNo);
-    const drillKey = String(drillId);
 
     const optimistic = {
       ...sessionDetail,
@@ -325,50 +296,16 @@ const SuoAttendance = () => {
     };
 
     setSessionDetail(optimistic);
-    setPenaltyRecordsBySession((prevRecords) => {
-      const sessionRecords = { ...(prevRecords?.[sessionKey] || {}) };
-      const cadetRecords = { ...(sessionRecords?.[cadetKey] || {}) };
-      if (backendStatus === "P") {
-        delete cadetRecords[drillKey];
-      } else if (penaltyType) {
-        cadetRecords[drillKey] = penaltyType;
-      }
-      if (Object.keys(cadetRecords).length === 0) {
-        delete sessionRecords[cadetKey];
-      } else {
-        sessionRecords[cadetKey] = cadetRecords;
-      }
-      return {
-        ...prevRecords,
-        [sessionKey]: sessionRecords,
-      };
-    });
 
     try {
       await attendanceApi.patchRecords({
         updates: [{ drill_id: drillId, regimental_no: cadetRegimentalNo, status: backendStatus }],
       });
+      await loadFines();
     } catch (err) {
       setSessionDetail(prev);
-      setPenaltyRecordsBySession(prevPenaltyRecords);
       window.alert(err?.response?.data?.message || "Unable to update attendance.");
     }
-  };
-
-  const setSessionFineAmount = () => {
-    if (!selectedSessionId) return;
-    const currentValue = sessionFineById?.[String(selectedSessionId)] ?? 0;
-    const amountInput = window.prompt("Enter fine amount per AP (in INR):", String(currentValue));
-    if (amountInput === null) return;
-    const parsed = parseFineAmount(amountInput);
-    if (parsed === null) {
-      window.alert("Please enter a valid non-negative amount.");
-      return;
-    }
-    setSessionFineById((prev) => ({
-      ...prev,
-      [String(selectedSessionId)]: parsed,
-    }));
   };
 
   const downloadCSV = async () => {
@@ -391,8 +328,37 @@ const SuoAttendance = () => {
     try {
       await leaveApi.reviewStatus(leaveId, { status });
       await loadLeaveRequests();
+      await loadFines();
     } catch (err) {
       window.alert(err?.response?.data?.message || "Unable to update leave status.");
+    }
+  };
+
+  const verifySubmittedPayment = async (fineId, paymentId, status) => {
+    setVerifyingPaymentId(paymentId);
+    try {
+      await fineApi.verify(fineId, { payment_id: paymentId, status });
+      await loadFines();
+      window.alert(`Payment ${status}.`);
+    } catch (err) {
+      window.alert(err?.response?.data?.message || "Unable to verify payment.");
+    } finally {
+      setVerifyingPaymentId(null);
+    }
+  };
+
+  const downloadFineReport = async () => {
+    try {
+      const response = await fineApi.report({ format: "csv" });
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "fine_report.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      window.alert(err?.response?.data?.message || "Unable to download fine report.");
     }
   };
 
@@ -484,26 +450,10 @@ const SuoAttendance = () => {
               <span>Add Drill</span>
             </button>
 
-            <button
-              className="attendance-btn attendance-btn-secondary"
-              onClick={setSessionFineAmount}
-              disabled={actionLoading || !selectedSessionId}
-            >
-              <Plus size={18} />
-              <span>Set Fine</span>
-            </button>
-
             <button className="attendance-btn attendance-btn-primary" onClick={downloadCSV} disabled={actionLoading}>
               <Download size={18} />
               <span>Download Attendance</span>
             </button>
-
-            <div className="fine-pill-display" title="Session fine amount used for AP status">
-              Fine/AP: Rs. {selectedSessionFine.toFixed(2)}
-            </div>
-            <div className="fine-pill-display fine-pill-note" title="Attendance status mapping">
-              AP = absent with penalty, A = absent without penalty
-            </div>
           </div>
         )}
       </div>
@@ -561,20 +511,10 @@ const SuoAttendance = () => {
                 <tbody>
                   {cadets.map((cadet) => {
                     const { attended, total, percent } = calculateAttendance(cadet.attendance || [], drills.length);
-                    const cadetPenaltyMap = currentSessionPenaltyRecords?.[String(cadet.regimental_no)] || {};
-                    const apCount = drills.reduce((count, drill, i) => {
-                      const rawStatus = cadet.attendance?.[sortedDrillEntries[i].originalIndex] ?? null;
-                      if (rawStatus !== "A") return count;
-                      const penaltyChoice = cadetPenaltyMap?.[String(drill.drill_id)];
-                      const leaveStatus = getLeaveStatusForCadetDrill(
-                        leaveRequests,
-                        cadet.regimental_no,
-                        drill.drill_id
-                      );
-                      const uiStatus = penaltyChoice === "AP" || leaveStatus === "rejected" ? "AP" : "A";
-                      return uiStatus === "AP" ? count + 1 : count;
+                    const totalFine = drills.reduce((sum, drill) => {
+                      const key = `${cadet.regimental_no}:${drill.drill_id}`;
+                      return sum + Number(pendingFineMap.get(key) || 0);
                     }, 0);
-                    const totalFine = selectedSessionFine * apCount;
                     return (
                       <tr key={cadet.regimental_no}>
                         <td className="cadet-name-cell">{cadet.name}</td>
@@ -585,23 +525,18 @@ const SuoAttendance = () => {
                             cadet.regimental_no,
                             drill.drill_id
                           );
-                          const penaltyChoice = cadetPenaltyMap?.[String(drill.drill_id)];
                           const uiStatus =
                             rawStatus === "P"
                               ? "P"
                               : rawStatus === "A"
-                              ? penaltyChoice === "AP"
-                                ? "AP"
-                                : leaveStatus === "rejected"
-                                ? "AP"
-                                : "A"
+                              ? "A"
                               : null;
                           const leaveHint =
                             leaveStatus === "approved"
-                              ? "Leave approved - choose A (without penalty)"
+                              ? "Leave approved"
                               : leaveStatus === "rejected"
-                              ? "Leave rejected - choose AP (with penalty)"
-                              : "Choose AP for penalty or A for no penalty";
+                              ? "Leave rejected - fine may apply"
+                              : "No approved leave - fine may apply";
                           return (
                             <td key={`${cadet.regimental_no}-${drill.drill_id}`}>
                               {uiStatus ? (
@@ -614,7 +549,6 @@ const SuoAttendance = () => {
                                   title={leaveHint}
                                 >
                                   <option value="P">P</option>
-                                  <option value="AP">AP</option>
                                   <option value="A">A</option>
                                 </select>
                               ) : (
@@ -633,6 +567,88 @@ const SuoAttendance = () => {
                 </tbody>
               </table>
             ) : null}
+          </div>
+
+          <div className="attendance-table-card leave-table-card" style={{ marginTop: 16 }}>
+            <div className="leave-head" style={{ marginBottom: 10 }}>
+              <span className="leave-cadet">Fine Management</span>
+              <button className="attendance-btn attendance-btn-secondary" onClick={downloadFineReport} type="button">
+                <Download size={16} />
+                <span>Download Fine Report</span>
+              </button>
+            </div>
+            <div className="leave-meta" style={{ marginBottom: 8 }}>
+              <span>Pending: {(fines || []).filter((f) => f.status === "pending").length}</span>
+              <span>Payment Submitted: {(fines || []).filter((f) => f.status === "payment_submitted").length}</span>
+              <span>Approved: {(fines || []).filter((f) => f.status === "paid").length}</span>
+            </div>
+            {(fines || []).length === 0 ? (
+              <p className="leave-empty-text">No fines found.</p>
+            ) : (
+              <div className="leave-list">
+                {(fines || []).map((fine) => {
+                const submittedPayment = (fine.payments || []).find((p) => p.payment_status === "submitted");
+                return (
+                  <div className="leave-row" key={fine.fine_id}>
+                    <div className="leave-main">
+                      <div className="leave-head">
+                        <span className="leave-cadet">{fine.cadet_name}</span>
+                        <span className="leave-regimental">({fine.regimental_no})</span>
+                        <span className={`leave-status-badge status-${fine.status}`}>
+                          {fine.workflow_status_label || fine.status}
+                        </span>
+                      </div>
+                      <p className="leave-reason">
+                        {fine.session_name} / {fine.drill_name} ({toDisplayDate(fine.drill_date)}) - Rs.{" "}
+                        {Number(fine.amount || 0).toFixed(2)}
+                      </p>
+                      <div className="leave-meta">
+                        <span>Created: {toDisplayDateTime(fine.created_at)}</span>
+                        <span>
+                          Payment Ref: {submittedPayment?.payment_ref || fine.latest_payment?.payment_ref || "N/A"}
+                        </span>
+                        {submittedPayment?.payment_proof_url || fine.latest_payment?.payment_proof_url ? (
+                          <a
+                            href={submittedPayment?.payment_proof_url || fine.latest_payment?.payment_proof_url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View Proof
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                    {fine.status === "payment_submitted" && submittedPayment ? (
+                      <div className="leave-actions">
+                        <button
+                          type="button"
+                          className="leave-action-btn leave-approve"
+                          disabled={verifyingPaymentId === submittedPayment.payment_id}
+                          onClick={() =>
+                            verifySubmittedPayment(fine.fine_id, submittedPayment.payment_id, "verified")
+                          }
+                        >
+                          <Check size={16} />
+                          <span>Approve</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="leave-action-btn leave-reject"
+                          disabled={verifyingPaymentId === submittedPayment.payment_id}
+                          onClick={() =>
+                            verifySubmittedPayment(fine.fine_id, submittedPayment.payment_id, "rejected")
+                          }
+                        >
+                          <X size={16} />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              </div>
+            )}
           </div>
         </div>
       ) : (

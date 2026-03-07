@@ -237,28 +237,29 @@ const upsertAttendanceRecords = async ({ trx, updates, markedByUserId }) => {
 
 const createLeaveApplication = async ({
   regimentalNo,
-  sessionId,
   drillId,
   reason,
   attachmentUrl,
 }) => {
-  const [row] = await db("leave_applications")
+  const [row] = await db("leaves")
     .insert({
       regimental_no: regimentalNo,
-      session_id: sessionId,
       drill_id: drillId,
       reason,
-      attachment_url: attachmentUrl || null,
+      document_url: attachmentUrl || null,
       status: "pending",
+      applied_at: db.fn.now(),
     })
     .returning([
       "leave_id",
       "regimental_no",
-      "session_id",
       "drill_id",
       "reason",
-      "attachment_url",
+      "document_url",
       "status",
+      "applied_at",
+      "reviewed_by",
+      "reviewed_at",
       "created_at",
       "updated_at",
     ]);
@@ -277,24 +278,26 @@ const getSessionAndDrillForCollege = async ({ sessionId, drillId, collegeId }) =
     .first();
 
 const listLeaveByRegimental = async (regimentalNo) =>
-  db("leave_applications as l")
-    .leftJoin("attendance_sessions as s", "s.session_id", "l.session_id")
+  db("leaves as l")
     .leftJoin("attendance_drills as d", "d.drill_id", "l.drill_id")
-    .leftJoin("users as ru", "ru.user_id", "l.reviewed_by_user_id")
+    .leftJoin("attendance_sessions as s", "s.session_id", "d.session_id")
+    .leftJoin("users as ru", "ru.user_id", "l.reviewed_by")
     .leftJoin("cadet_profiles as rcp", "rcp.user_id", "ru.user_id")
     .where("l.regimental_no", regimentalNo)
-    .orderBy("l.created_at", "desc")
+    .orderBy("l.applied_at", "desc")
     .select(
       "l.leave_id",
       "l.regimental_no",
-      "l.session_id",
       "l.drill_id",
       "l.reason",
-      "l.attachment_url",
+      "l.document_url",
       "l.status",
-      "l.reviewed_by_user_id",
+      "l.reviewed_by",
       "l.reviewed_at",
+      "l.applied_at",
       "l.created_at",
+      "l.updated_at",
+      "d.session_id",
       "s.session_name",
       "d.drill_name",
       "d.drill_date",
@@ -303,32 +306,34 @@ const listLeaveByRegimental = async (regimentalNo) =>
     );
 
 const getLeaveByIdForCollege = async ({ leaveId, collegeId }) =>
-  db("leave_applications as l")
-    .join("attendance_sessions as s", "s.session_id", "l.session_id")
+  db("leaves as l")
+    .join("attendance_drills as d", "d.drill_id", "l.drill_id")
+    .join("attendance_sessions as s", "s.session_id", "d.session_id")
     .where("l.leave_id", leaveId)
     .where("s.college_id", collegeId)
     .whereNull("s.deleted_at")
-    .select("l.leave_id", "l.status")
+    .whereNull("d.deleted_at")
+    .select("l.leave_id", "l.status", "l.regimental_no", "l.drill_id")
     .first();
 
 const updateLeaveStatus = async ({ leaveId, status, reviewedByUserId }) => {
-  const [row] = await db("leave_applications")
+  const [row] = await db("leaves")
     .where("leave_id", leaveId)
     .update({
       status,
-      reviewed_by_user_id: reviewedByUserId,
+      reviewed_by: reviewedByUserId,
       reviewed_at: db.fn.now(),
     })
     .returning([
       "leave_id",
       "regimental_no",
-      "session_id",
       "drill_id",
       "reason",
-      "attachment_url",
+      "document_url",
       "status",
-      "reviewed_by_user_id",
+      "reviewed_by",
       "reviewed_at",
+      "applied_at",
       "created_at",
       "updated_at",
     ]);

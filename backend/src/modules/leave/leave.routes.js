@@ -1,8 +1,8 @@
 const express = require("express");
 const upload = require("../../middlewares/upload.middleware");
+const { authenticate } = require("../../middlewares/auth.middleware");
 const controller = require("./leave.controller");
 const { isSuo } = require("./leave.service");
-const { authenticateLeaveUser } = require("./leave.auth");
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ const allowLeaveRoles = (...roles) => (req, res, next) => {
   return next();
 };
 
-router.use(authenticateLeaveUser);
+router.use(authenticate);
 
 router.post("/apply", allowLeaveRoles("CADET"), upload.single("document"), controller.applyLeave);
 router.get("/my", allowLeaveRoles("CADET"), controller.getMyLeaveRequests);

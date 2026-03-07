@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./anoAttendance.css";
 import { attendanceApi } from "../../api/attendanceApi";
+import { fineApi } from "../../api/fineApi";
 
 function calculateAttendance(attArr) {
   const total = attArr.length;
@@ -15,6 +16,11 @@ const AnoAttendance = () => {
   const [sessionDetail, setSessionDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [fineSummary, setFineSummary] = useState({
+    total_count: 0,
+    total_amount: 0,
+    by_status: { pending: 0, payment_submitted: 0, paid: 0, cancelled: 0 },
+  });
 
   const loadSessions = async (preferredSessionId = null) => {
     setLoading(true);
@@ -54,8 +60,30 @@ const AnoAttendance = () => {
     }
   };
 
+  const loadFineSummary = async () => {
+    try {
+      const res = await fineApi.getAll();
+      const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
+      const summary = rows.reduce(
+        (acc, fine) => {
+          const amount = Number(fine.amount || 0);
+          acc.total_count += 1;
+          acc.total_amount += amount;
+          acc.by_status[fine.status] = (acc.by_status[fine.status] || 0) + 1;
+          return acc;
+        },
+        { total_count: 0, total_amount: 0, by_status: { pending: 0, payment_submitted: 0, paid: 0, cancelled: 0 } }
+      );
+      setFineSummary(summary);
+    } catch (err) {
+      const serverMessage = err?.response?.data?.message;
+      if (serverMessage) setError(serverMessage);
+    }
+  };
+
   useEffect(() => {
     loadSessions();
+    loadFineSummary();
   }, []);
 
   useEffect(() => {
@@ -75,6 +103,21 @@ const AnoAttendance = () => {
       URL.revokeObjectURL(url);
     } catch (err) {
       window.alert(err?.response?.data?.message || "Unable to download attendance CSV.");
+    }
+  };
+
+  const handleFineReportDownload = async () => {
+    try {
+      const response = await fineApi.report({ format: "csv" });
+      const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "fine_report.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      window.alert(err?.response?.data?.message || "Unable to download fine report.");
     }
   };
 
@@ -105,6 +148,18 @@ const AnoAttendance = () => {
         <button className="ano-attendance-btn ano-attendance-btn-primary" onClick={handleDownload}>
           Download Attendance
         </button>
+        <button className="ano-attendance-btn ano-attendance-btn-primary" onClick={handleFineReportDownload}>
+          Download Fine Report
+        </button>
+      </div>
+      <div className="ano-attendance-table-card" style={{ marginTop: 12 }}>
+        <h3>Fine Summary</h3>
+        <p>Total Fines: {fineSummary.total_count}</p>
+        <p>Total Amount: Rs. {Number(fineSummary.total_amount || 0).toFixed(2)}</p>
+        <p>Pending: {fineSummary.by_status.pending || 0}</p>
+        <p>Payment Submitted: {fineSummary.by_status.payment_submitted || 0}</p>
+        <p>Paid: {fineSummary.by_status.paid || 0}</p>
+        <p>Cancelled: {fineSummary.by_status.cancelled || 0}</p>
       </div>
       <div className="ano-attendance-table-card">
         <table className="ano-attendance-table">

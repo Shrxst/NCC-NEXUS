@@ -1,5 +1,6 @@
 const { uploadToCloudinary } = require("../../services/cloudinary.service");
 const repo = require("./attendance.repository");
+const fineEligibilityService = require("../fines/fine-eligibility.service");
 
 const createHttpError = (status, message) => {
   const err = new Error(message);
@@ -127,12 +128,12 @@ const buildCadetAttendancePayload = ({ sessions, cadetRegimentalNo, leaveApplica
       drill_date: item.drill_date,
       drill_time: item.drill_time ? String(item.drill_time).slice(0, 8) : null,
       reason: item.reason,
-      attachment_url: item.attachment_url,
+      attachment_url: item.document_url,
       status: item.status,
-      reviewed_by_user_id: item.reviewed_by_user_id || null,
+      reviewed_by_user_id: item.reviewed_by || null,
       reviewed_by_name: item.reviewed_by_name || null,
       reviewed_at: toIsoDate(item.reviewed_at),
-      created_at: toIsoDate(item.created_at),
+      created_at: toIsoDate(item.applied_at || item.created_at),
     })),
   };
 };
@@ -282,6 +283,11 @@ const patchAttendanceRecords = async ({ reqUser, updates }) => {
       updates,
       markedByUserId: reqUser.user_id,
     });
+    await fineEligibilityService.runForAttendanceUpdates({
+      trx,
+      updates,
+      actorUserId: reqUser.user_id,
+    });
   });
 };
 
@@ -400,12 +406,47 @@ const submitLeave = async ({ reqUser, payload, file }) => {
     attachmentUrl = result.secure_url;
   }
 
-  return repo.createLeaveApplication({
-    regimentalNo: payload.regimental_no,
-    sessionId: payload.session_id,
-    drillId: payload.drill_id,
-    reason: payload.reason,
-    attachmentUrl,
+  return repo.db.transaction(async (trx) => {
+    let leave;
+    try {
+      leave = await trx("leaves")
+        .insert({
+          regimental_no: payload.regimental_no,
+          drill_id: payload.drill_id,
+          reason: payload.reason,
+          document_url: attachmentUrl || null,
+          status: "pending",
+          applied_at: repo.db.fn.now(),
+        })
+        .returning([
+          "leave_id",
+          "regimental_no",
+          "drill_id",
+          "reason",
+          "document_url",
+          "status",
+          "applied_at",
+          "reviewed_by",
+          "reviewed_at",
+          "created_at",
+          "updated_at",
+        ])
+        .then((rows) => rows[0]);
+    } catch (err) {
+      if (err?.code === "23505" && String(err?.constraint || "") === "uq_leaves_regimental_drill") {
+        throw createHttpError(409, "Leave application already exists for this drill.");
+      }
+      throw err;
+    }
+
+    await fineEligibilityService.runForLeaveUpdate({
+      trx,
+      regimentalNo: payload.regimental_no,
+      drillId: payload.drill_id,
+      actorUserId: reqUser.user_id,
+    });
+
+    return leave;
   });
 };
 
@@ -415,7 +456,38 @@ const reviewLeave = async ({ reqUser, leaveId, status }) => {
   const leave = await repo.getLeaveByIdForCollege({ leaveId, collegeId: context.college_id });
   if (!leave) throw createHttpError(404, "Leave application not found.");
   if (leave.status !== "pending") throw createHttpError(409, "Leave application already reviewed.");
-  return repo.updateLeaveStatus({ leaveId, status, reviewedByUserId: reqUser.user_id });
+  return repo.db.transaction(async (trx) => {
+    const updated = await trx("leaves")
+      .where("leave_id", leaveId)
+      .update({
+        status,
+        reviewed_by: reqUser.user_id,
+        reviewed_at: repo.db.fn.now(),
+      })
+      .returning([
+        "leave_id",
+        "regimental_no",
+        "drill_id",
+        "reason",
+        "document_url",
+        "status",
+        "reviewed_by",
+        "reviewed_at",
+        "applied_at",
+        "created_at",
+        "updated_at",
+      ])
+      .then((rows) => rows[0]);
+
+    await fineEligibilityService.runForLeaveUpdate({
+      trx,
+      regimentalNo: updated.regimental_no,
+      drillId: updated.drill_id,
+      actorUserId: reqUser.user_id,
+    });
+
+    return updated;
+  });
 };
 
 module.exports = {

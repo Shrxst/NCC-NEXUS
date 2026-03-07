@@ -1,9 +1,6 @@
+const { uploadToCloudinary } = require("../../services/cloudinary.service");
+const fineEligibilityService = require("../fines/fine-eligibility.service");
 const repo = require("./leave.repository");
-const {
-  createSignedDocumentUrl,
-  uploadLeaveDocument,
-} = require("../../services/supabaseStorage.service");
-const { createAuthUser, isConfigured: isSupabaseAuthAdminConfigured } = require("../../services/supabaseAuthAdmin.service");
 
 const createHttpError = (status, message) => {
   const err = new Error(message);
@@ -26,13 +23,6 @@ const isSuo = (user) =>
 
 const isLeaveAdmin = (user) => user?.role === "ANO" || isSuo(user);
 
-const normalizeFileName = (filename = "document") =>
-  String(filename)
-    .normalize("NFKD")
-    .replace(/[^\w.\-]+/g, "_")
-    .replace(/_+/g, "_")
-    .slice(0, 120);
-
 const toIsoDate = (dateValue) => {
   if (!dateValue) return null;
   const d = new Date(dateValue);
@@ -40,81 +30,25 @@ const toIsoDate = (dateValue) => {
   return d.toISOString();
 };
 
-const toPayload = async (row) => {
-  let documentUrl = null;
-  if (row.document_path) {
-    try {
-      documentUrl = await createSignedDocumentUrl({
-        path: row.document_path,
-        expiresInSeconds: 300,
-      });
-    } catch (err) {
-      documentUrl = null;
-    }
-  }
-  return {
-    leave_id: row.leave_id,
-    cadet_name: row.cadet_name || null,
-    regimental_no: row.cadet_regimental_no || row.applicant_regimental_no || null,
-    reason: row.reason,
-    status: row.status,
-    attachment_path: row.document_path || null,
-    attachment_url: documentUrl,
-    attachment_name: row.document_path ? String(row.document_path).split("/").pop() : null,
-    reviewed_by_user_id: row.reviewed_by_user_id || null,
-    reviewed_by_name: row.reviewed_by_name || null,
-    reviewed_at: toIsoDate(row.reviewed_at),
-    created_at: toIsoDate(row.created_at),
-    updated_at: toIsoDate(row.updated_at),
-  };
-};
-
-const ensureCadet = async (reqUser) => {
-  if (reqUser?.role !== "CADET") throw createHttpError(403, "Cadet access required.");
-
-  let [user, cadet] = await Promise.all([
-    repo.getUserById(reqUser.user_id),
-    repo.getCadetProfileByUserId(reqUser.user_id),
-  ]);
-
-  if (!user) throw createHttpError(401, "User not found.");
-  if (!cadet) throw createHttpError(404, "Cadet profile not found.");
-  if (!user.auth_user_id) {
-    const canProvisionAuthUser = isSupabaseAuthAdminConfigured();
-    const resolvedAuthUserId =
-      reqUser?.auth_user_id ||
-      (user.email ? await repo.findAuthUserIdByEmail(user.email) : null);
-
-    let candidateAuthUserId = resolvedAuthUserId;
-    if (!candidateAuthUserId && user.email && canProvisionAuthUser) {
-      // Provision auth account only when user is absent in auth.users.
-      await createAuthUser({ email: user.email, role: isSuo(reqUser) ? "SUO" : reqUser?.role || user.role });
-      candidateAuthUserId = await repo.findAuthUserIdByEmail(user.email);
-    }
-
-    if (candidateAuthUserId) {
-      const updated = await repo.setUserAuthUserId({
-        userId: user.user_id,
-        authUserId: candidateAuthUserId,
-      });
-      if (updated?.auth_user_id) {
-        user = updated;
-      }
-    }
-  }
-
-  if (!user.auth_user_id) {
-    const hint = isSupabaseAuthAdminConfigured()
-      ? "Ensure this cadet has a matching Supabase Auth account (same email) or set users.auth_user_id."
-      : "Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in backend env, or set users.auth_user_id manually.";
-    throw createHttpError(
-      409,
-      `Supabase auth mapping missing. ${hint}`
-    );
-  }
-
-  return { user, cadet };
-};
+const toPayload = (row) => ({
+  leave_id: Number(row.leave_id),
+  cadet_name: row.cadet_name || null,
+  regimental_no: row.regimental_no || null,
+  drill_id: Number(row.drill_id),
+  session_id: Number(row.session_id),
+  drill_name: row.drill_name || null,
+  session_name: row.session_name || null,
+  drill_date: row.drill_date || null,
+  drill_time: row.drill_time ? String(row.drill_time).slice(0, 8) : null,
+  reason: row.reason,
+  status: row.status,
+  attachment_url: row.document_url || null,
+  reviewed_by_user_id: row.reviewed_by || null,
+  reviewed_by_name: row.reviewed_by_name || null,
+  reviewed_at: toIsoDate(row.reviewed_at),
+  created_at: toIsoDate(row.applied_at || row.created_at),
+  updated_at: toIsoDate(row.updated_at),
+});
 
 const assertFileValid = (file) => {
   if (!file) return;
@@ -126,65 +60,103 @@ const assertFileValid = (file) => {
   }
 };
 
+const getCadetContext = async (reqUser) => {
+  if (reqUser?.role !== "CADET") throw createHttpError(403, "Cadet access required.");
+  const cadet = await repo.getCadetProfileByUserId(reqUser.user_id);
+  if (!cadet) throw createHttpError(404, "Cadet profile not found.");
+  return cadet;
+};
+
 const applyLeave = async ({ reqUser, payload, file }) => {
-  const { user, cadet } = await ensureCadet(reqUser);
+  const cadet = await getCadetContext(reqUser);
   assertFileValid(file);
 
-  const created = await repo.createLeaveRequest({
-    applicantUserId: user.user_id,
-    applicantAuthUserId: user.auth_user_id,
-    applicantRegimentalNo: cadet.regimental_no,
-    reason: payload.reason,
+  const drill = await repo.getDrillForCollege({
+    drillId: payload.drill_id,
+    collegeId: cadet.college_id,
   });
+  if (!drill) throw createHttpError(400, "Invalid drill for your college scope.");
 
-  let finalRow = created;
-  try {
-    if (file?.buffer) {
-      const safeFileName = normalizeFileName(file.originalname || "document");
-      const documentPath = `${user.auth_user_id}/${created.leave_id}/${safeFileName}`;
-      await uploadLeaveDocument({ path: documentPath, file });
-      finalRow = await repo.updateLeaveDocumentPath({
-        leaveId: created.leave_id,
-        documentPath,
-      });
-    }
-  } catch (error) {
-    await repo.deleteLeaveById(created.leave_id);
-    throw error;
+  let documentUrl = null;
+  if (file?.buffer) {
+    const uploadResult = await uploadToCloudinary(file.buffer, "ncc-nexus/leaves");
+    documentUrl = uploadResult.secure_url;
   }
 
-  const fetched = await repo.getLeaveById(finalRow.leave_id);
-  return toPayload(fetched || finalRow);
+  return repo.db.transaction(async (trx) => {
+    let created;
+    try {
+      created = await repo.createLeave({
+        trx,
+        regimentalNo: cadet.regimental_no,
+        drillId: payload.drill_id,
+        reason: payload.reason,
+        documentUrl,
+      });
+    } catch (err) {
+      if (err?.code === "23505" && String(err?.constraint || "") === "uq_leaves_regimental_drill") {
+        throw createHttpError(409, "Leave already applied for this drill.");
+      }
+      throw err;
+    }
+
+    await fineEligibilityService.runForLeaveUpdate({
+      trx,
+      regimentalNo: cadet.regimental_no,
+      drillId: payload.drill_id,
+      actorUserId: reqUser.user_id,
+    });
+
+    const rows = await repo.listLeaveByRegimentalNo(cadet.regimental_no);
+    const fresh = rows.find((row) => Number(row.leave_id) === Number(created.leave_id)) || created;
+    return toPayload(fresh);
+  });
 };
 
 const getMyLeaveRequests = async ({ reqUser }) => {
-  if (reqUser?.role !== "CADET") throw createHttpError(403, "Cadet access required.");
-  const rows = await repo.listLeaveByApplicantUserId(reqUser.user_id);
-  return Promise.all(rows.map((row) => toPayload(row)));
+  const cadet = await getCadetContext(reqUser);
+  const rows = await repo.listLeaveByRegimentalNo(cadet.regimental_no);
+  return rows.map((row) => toPayload(row));
 };
 
 const getAllLeaveRequests = async ({ reqUser }) => {
   if (!isLeaveAdmin(reqUser)) throw createHttpError(403, "SUO or ANO access required.");
-  const rows = await repo.listAllLeaveRequests();
-  return Promise.all(rows.map((row) => toPayload(row)));
+  if (!reqUser?.college_id) throw createHttpError(403, "College context missing.");
+  const rows = await repo.listAllLeaveByCollege(reqUser.college_id);
+  return rows.map((row) => toPayload(row));
 };
 
 const reviewLeaveStatus = async ({ reqUser, leaveId, status }) => {
   if (!isLeaveAdmin(reqUser)) throw createHttpError(403, "SUO or ANO access required.");
+  if (!reqUser?.college_id) throw createHttpError(403, "College context missing.");
 
-  const existing = await repo.getLeaveById(leaveId);
+  const existing = await repo.getLeaveByIdForCollege({
+    leaveId,
+    collegeId: reqUser.college_id,
+  });
   if (!existing) throw createHttpError(404, "Leave request not found.");
   if (existing.status !== "pending") throw createHttpError(409, "Leave request already reviewed.");
 
-  const updated = await repo.updateLeaveStatus({
-    leaveId,
-    status,
-    reviewedByUserId: reqUser.user_id,
-  });
-  if (!updated) throw createHttpError(409, "Leave request already reviewed.");
+  return repo.db.transaction(async (trx) => {
+    const updated = await repo.updateLeaveStatus({
+      trx,
+      leaveId,
+      status,
+      reviewedByUserId: reqUser.user_id,
+    });
+    if (!updated) throw createHttpError(409, "Leave request already reviewed.");
 
-  const fetched = await repo.getLeaveById(updated.leave_id);
-  return toPayload(fetched || updated);
+    await fineEligibilityService.runForLeaveUpdate({
+      trx,
+      regimentalNo: updated.regimental_no,
+      drillId: updated.drill_id,
+      actorUserId: reqUser.user_id,
+    });
+
+    const rows = await repo.listAllLeaveByCollege(reqUser.college_id);
+    const fresh = rows.find((row) => Number(row.leave_id) === Number(updated.leave_id)) || updated;
+    return toPayload(fresh);
+  });
 };
 
 module.exports = {

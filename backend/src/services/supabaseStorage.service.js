@@ -1,6 +1,7 @@
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const LEAVE_BUCKET = process.env.SUPABASE_LEAVE_BUCKET || "leave-documents";
+const FINE_PAYMENT_BUCKET = process.env.SUPABASE_FINE_PAYMENT_BUCKET || "fine-payment-proofs";
 
 const assertSupabaseStorageEnv = () => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -70,8 +71,60 @@ const createSignedDocumentUrl = async ({ path, expiresInSeconds = 300 }) => {
   return `${SUPABASE_URL}/storage/v1${data.signedURL}`;
 };
 
+const uploadFinePaymentProof = async ({ path, file }) => {
+  assertSupabaseStorageEnv();
+  const endpoint = `${SUPABASE_URL}/storage/v1/object/${FINE_PAYMENT_BUCKET}/${path}`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": file.mimetype || "application/octet-stream",
+      "x-upsert": "false",
+    },
+    body: file.buffer,
+  });
+
+  if (!response.ok) {
+    const payload = await response.text();
+    const err = new Error(`Fine payment proof upload failed: ${payload || response.statusText}`);
+    err.status = 502;
+    throw err;
+  }
+
+  return { bucket: FINE_PAYMENT_BUCKET, path };
+};
+
+const createSignedFinePaymentProofUrl = async ({ path, expiresInSeconds = 300 }) => {
+  if (!path) return null;
+  assertSupabaseStorageEnv();
+
+  const endpoint = `${SUPABASE_URL}/storage/v1/object/sign/${FINE_PAYMENT_BUCKET}/${path}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ expiresIn: expiresInSeconds }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.text();
+    const err = new Error(`Fine payment proof signed URL generation failed: ${payload || response.statusText}`);
+    err.status = 502;
+    throw err;
+  }
+
+  const data = await response.json();
+  if (!data?.signedURL) return null;
+  if (String(data.signedURL).startsWith("http")) return data.signedURL;
+  return `${SUPABASE_URL}/storage/v1${data.signedURL}`;
+};
+
 module.exports = {
   LEAVE_BUCKET,
+  FINE_PAYMENT_BUCKET,
   uploadLeaveDocument,
   createSignedDocumentUrl,
+  uploadFinePaymentProof,
+  createSignedFinePaymentProofUrl,
 };

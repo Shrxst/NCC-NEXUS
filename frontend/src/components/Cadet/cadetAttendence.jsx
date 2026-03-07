@@ -23,20 +23,7 @@ import {
 import "./cadetAttendene.css";
 import { attendanceApi } from "../../api/attendanceApi";
 import { leaveApi } from "../../api/leaveApi";
-
-const SESSION_FINE_STORAGE_KEY = "ncc_suo_session_fine_v1";
-const PENALTY_RECORD_STORAGE_KEY = "ncc_suo_penalty_records_v1";
-
-const readStorageObject = (key) => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-};
+import { fineApi } from "../../api/fineApi";
 
 function getStatusIcon(status) {
   switch (status) {
@@ -96,18 +83,25 @@ export default function CadetAttendance() {
 
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [leaveReason, setLeaveReason] = useState("");
+  const [selectedLeaveDrillId, setSelectedLeaveDrillId] = useState("");
   const [leaveTimestamp, setLeaveTimestamp] = useState(new Date());
   const [selectedFile, setSelectedFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fines, setFines] = useState([]);
+  const [payingFineId, setPayingFineId] = useState(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentRef, setPaymentRef] = useState("");
+  const [paymentProofFile, setPaymentProofFile] = useState(null);
+  const [paymentTargetFine, setPaymentTargetFine] = useState(null);
+  const paymentFileRef = useRef(null);
   const fileRef = useRef(null);
 
-  const userInfo = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch {
-      return {};
-    }
-  }, []);
+  let userInfo = {};
+  try {
+    userInfo = JSON.parse(localStorage.getItem("user") || "{}");
+  } catch {
+    userInfo = {};
+  }
 
   const regimentalNo =
     userInfo.regimental_no ||
@@ -161,9 +155,22 @@ export default function CadetAttendance() {
     }
   };
 
+  const loadMyFines = async () => {
+    try {
+      const res = await fineApi.getMy();
+      const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
+      setFines(rows);
+    } catch (err) {
+      setFines([]);
+      const serverMessage = err?.response?.data?.message;
+      if (serverMessage) setError(serverMessage);
+    }
+  };
+
   useEffect(() => {
     loadAttendance();
     loadMyLeaves();
+    loadMyFines();
   }, [regimentalNo, cadetKey]);
 
   useEffect(() => {
@@ -182,12 +189,17 @@ export default function CadetAttendance() {
     setSelectedFile(null);
     if (fileRef.current) fileRef.current.value = "";
     setLeaveTimestamp(new Date());
+    const firstDrill = sessions
+      .flatMap((session) => session.drills.map((drill) => ({ ...drill, session_name: session.session_name })))
+      .find((drill) => drill?.drill_id);
+    setSelectedLeaveDrillId(firstDrill ? String(firstDrill.drill_id) : "");
     setIsLeaveModalOpen(true);
   };
 
   const closeLeaveModal = () => {
     setIsLeaveModalOpen(false);
     setLeaveReason("");
+    setSelectedLeaveDrillId("");
     setSelectedFile(null);
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -198,6 +210,10 @@ export default function CadetAttendance() {
       window.alert("Please enter reason for leave.");
       return;
     }
+    if (!selectedLeaveDrillId) {
+      window.alert("Please select a drill for leave.");
+      return;
+    }
     if (!cadetKey) {
       window.alert("Cadet identity is missing. Please login again.");
       return;
@@ -206,11 +222,14 @@ export default function CadetAttendance() {
     setSubmitting(true);
     try {
       const formData = new FormData();
+      formData.append("drill_id", String(selectedLeaveDrillId));
       formData.append("reason", leaveReason.trim());
       if (selectedFile) formData.append("document", selectedFile);
 
       await leaveApi.apply(formData);
       await loadMyLeaves();
+      await loadAttendance();
+      await loadMyFines();
       closeLeaveModal();
     } catch (err) {
       window.alert(err?.response?.data?.message || err?.message || "Failed to submit leave.");
@@ -224,39 +243,81 @@ export default function CadetAttendance() {
       ? Number(stats.percent).toFixed(1)
       : "0.0";
 
-  const totalFineAmount = useMemo(() => {
-    if (!regimentalNo || !Array.isArray(sessions) || sessions.length === 0) return 0;
+  const pendingFines = useMemo(
+    () =>
+      (Array.isArray(fines) ? fines : []).filter(
+        (item) => item.status === "pending" || item.status === "payment_submitted"
+      ),
+    [fines]
+  );
 
-    const sessionFineById = readStorageObject(SESSION_FINE_STORAGE_KEY);
-    const penaltyRecordsBySession = readStorageObject(PENALTY_RECORD_STORAGE_KEY);
-    const rejectedLeaveDrillIds = new Set(
-      (leaveApplications || [])
-        .filter((item) => String(item?.status || "").toLowerCase() === "rejected")
-        .map((item) => String(item?.drill_id || ""))
-        .filter(Boolean)
-    );
+  const paymentHistory = useMemo(
+    () =>
+      (Array.isArray(fines) ? fines : []).flatMap((fine) =>
+        (fine.payments || []).map((payment) => ({ ...payment, fine_id: fine.fine_id, fine_status: fine.status }))
+      ),
+    [fines]
+  );
 
-    return sessions.reduce((sum, session) => {
-      const sessionId = String(session?.session_id || "");
-      const sessionFine = Number(sessionFineById?.[sessionId] || 0);
-      if (!sessionId || !Number.isFinite(sessionFine) || sessionFine <= 0) return sum;
+  const totalFineAmount = useMemo(
+    () => pendingFines.reduce((sum, fine) => sum + Number(fine.amount || 0), 0),
+    [pendingFines]
+  );
 
-      const sessionPenaltyRows = penaltyRecordsBySession?.[sessionId] || {};
-      const cadetPenaltyMap =
-        sessionPenaltyRows?.[String(regimentalNo)] || sessionPenaltyRows?.[String(cadetKey)] || {};
+  const openPaymentModal = (fine) => {
+    if (
+      regimentalNo &&
+      String(fine?.regimental_no || "").trim().toLowerCase() !== String(regimentalNo).trim().toLowerCase()
+    ) {
+      window.alert("This fine does not belong to your account. Refresh and login again.");
+      return;
+    }
+    setPaymentTargetFine(fine);
+    setPaymentRef("");
+    setPaymentProofFile(null);
+    if (paymentFileRef.current) paymentFileRef.current.value = "";
+    setIsPaymentModalOpen(true);
+  };
 
-      const apCount = (session?.drills || []).reduce((count, drill) => {
-        if (String(drill?.status || "") !== "A") return count;
-        const drillId = String(drill?.drill_id || "");
-        if (!drillId) return count;
-        const penaltyChoice = String(cadetPenaltyMap?.[drillId] || "");
-        const isAP = penaltyChoice === "AP" || (!penaltyChoice && rejectedLeaveDrillIds.has(drillId));
-        return isAP ? count + 1 : count;
-      }, 0);
+  const closePaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setPaymentTargetFine(null);
+    setPaymentRef("");
+    setPaymentProofFile(null);
+    if (paymentFileRef.current) paymentFileRef.current.value = "";
+  };
 
-      return sum + apCount * sessionFine;
-    }, 0);
-  }, [sessions, leaveApplications, regimentalNo, cadetKey]);
+  const handlePayFine = async (fine) => {
+    if (
+      regimentalNo &&
+      String(fine?.regimental_no || "").trim().toLowerCase() !== String(regimentalNo).trim().toLowerCase()
+    ) {
+      window.alert("You can pay only your own fine. Please refresh and login again.");
+      return;
+    }
+
+    const refValue = String(paymentRef || "").trim();
+    if (!refValue && !paymentProofFile) {
+      window.alert("Provide UPI reference ID or upload payment screenshot.");
+      return;
+    }
+    setPayingFineId(fine.fine_id);
+    try {
+      const formData = new FormData();
+      formData.append("payment_method", "UPI");
+      if (refValue) formData.append("payment_ref", refValue);
+      if (paymentProofFile) formData.append("payment_screenshot", paymentProofFile);
+
+      await fineApi.pay(fine.fine_id, formData);
+      await loadMyFines();
+      window.alert("Payment submitted for verification.");
+      closePaymentModal();
+    } catch (err) {
+      window.alert(err?.response?.data?.message || "Unable to submit payment.");
+    } finally {
+      setPayingFineId(null);
+    }
+  };
 
   return (
     <div className="ca-root">
@@ -323,7 +384,7 @@ export default function CadetAttendance() {
           </div>
           <div className="ca-stat-info">
             <span className="ca-stat-number ca-stat-number--money">Rs. {totalFineAmount.toFixed(2)}</span>
-            <span className="ca-stat-label">Total Fine</span>
+            <span className="ca-stat-label">Pending Fines</span>
           </div>
         </div>
       </div>
@@ -460,6 +521,81 @@ export default function CadetAttendance() {
         )}
       </div>
 
+      <div className="ca-section-card">
+        <h2 className="ca-section-heading">Fine History</h2>
+        {fines.length === 0 ? (
+          <p className="ca-empty-msg">No fines found.</p>
+        ) : (
+          <div className="ca-leave-list">
+            {fines.map((fine) => (
+              <div key={fine.fine_id} className="ca-leave-card">
+                <div className="ca-leave-card-top">
+                  <div className="ca-leave-info">
+                    <span className="ca-leave-drill">{fine.drill_name || "Drill"}</span>
+                    <span className="ca-leave-sep">|</span>
+                    <span className="ca-leave-session-name">{fine.session_name || "Session"}</span>
+                  </div>
+                  <button type="button" className={`ca-status-btn ca-status-${fine.status}`} disabled>
+                    <span>{fine.workflow_status_label || String(fine.status || "").toUpperCase()}</span>
+                  </button>
+                </div>
+                <div className="ca-leave-card-body">
+                  <div className="ca-leave-detail-row">
+                    <span>Drill: {fine.drill_date ? toDisplayDate(fine.drill_date) : "N/A"}</span>
+                    <span>Amount: Rs. {Number(fine.amount || 0).toFixed(2)}</span>
+                    <span>Created: {toDisplayDateTime(fine.created_at)}</span>
+                  </div>
+                  <p className="ca-leave-reason">
+                    <span>{fine.reason}</span>
+                  </p>
+                  {fine.status === "pending" ? (
+                    <button
+                      type="button"
+                      className="ca-apply-leave-btn"
+                      onClick={() => openPaymentModal(fine)}
+                      disabled={payingFineId === fine.fine_id}
+                    >
+                      <span>Pay Fine</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <h3 className="ca-section-heading" style={{ marginTop: 18 }}>Payment History</h3>
+        {paymentHistory.length === 0 ? (
+          <p className="ca-empty-msg">No payment records yet.</p>
+        ) : (
+          <div className="ca-leave-list">
+            {paymentHistory.map((payment) => (
+              <div key={payment.payment_id} className="ca-leave-card">
+                <div className="ca-leave-card-top">
+                  <div className="ca-leave-info">
+                    <span className="ca-leave-drill">Fine #{payment.fine_id}</span>
+                    <span className="ca-leave-sep">|</span>
+                    <span className="ca-leave-session-name">{payment.payment_method}</span>
+                  </div>
+                  <button type="button" className={`ca-status-btn ca-status-${payment.payment_status}`} disabled>
+                    <span>{String(payment.payment_status || "").toUpperCase()}</span>
+                  </button>
+                </div>
+                <div className="ca-leave-card-body">
+                  <div className="ca-leave-detail-row">
+                    <span>Amount: Rs. {Number(payment.amount || 0).toFixed(2)}</span>
+                    <span>Ref: {payment.payment_ref || "N/A"}</span>
+                  </div>
+                  <div className="ca-leave-detail-row">
+                    <span>Paid at: {toDisplayDateTime(payment.paid_at)}</span>
+                    <span>Verified: {payment.verified_at ? toDisplayDateTime(payment.verified_at) : "Pending"}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {isLeaveModalOpen && (
         <div className="ca-leave-modal-overlay" onClick={closeLeaveModal}>
           <div className="ca-leave-modal" onClick={(e) => e.stopPropagation()}>
@@ -471,6 +607,24 @@ export default function CadetAttendance() {
             </div>
 
             <form className="ca-leave-modal-form" onSubmit={handleSubmitLeave}>
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">Drill *</label>
+                <select
+                  className="ca-form-readonly"
+                  value={selectedLeaveDrillId}
+                  onChange={(e) => setSelectedLeaveDrillId(e.target.value)}
+                >
+                  <option value="">Select drill</option>
+                  {sessions.flatMap((session) =>
+                    (session.drills || []).map((drill) => (
+                      <option key={`${session.session_id}-${drill.drill_id}`} value={drill.drill_id}>
+                        {session.session_name} - {drill.name} ({toDisplayDate(drill.date)} {toDisplayTime(drill.time)})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
               <div className="ca-form-group ca-form-full">
                 <label className="ca-form-label">Reason *</label>
                 <textarea
@@ -528,6 +682,78 @@ export default function CadetAttendance() {
 
               <button type="submit" className="ca-submit-btn" disabled={submitting}>
                 <span>{submitting ? "Applying..." : "Apply Leave"}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isPaymentModalOpen && paymentTargetFine && (
+        <div className="ca-leave-modal-overlay" onClick={closePaymentModal}>
+          <div className="ca-leave-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="ca-leave-modal-header">
+              <h3>Pay Fine #{paymentTargetFine.fine_id}</h3>
+              <button type="button" className="ca-leave-modal-close" onClick={closePaymentModal}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              className="ca-leave-modal-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handlePayFine(paymentTargetFine);
+              }}
+            >
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">UPI Transaction ID</label>
+                <input
+                  className="ca-form-textarea"
+                  type="text"
+                  placeholder="Enter UPI reference (optional if screenshot uploaded)"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                />
+              </div>
+
+              <div className="ca-form-group ca-form-full">
+                <label className="ca-form-label">Payment Screenshot (Optional)</label>
+                <div className="ca-file-area">
+                  {paymentProofFile ? (
+                    <div className="ca-file-chosen">
+                      <Paperclip size={16} />
+                      <span className="ca-file-name">{paymentProofFile.name}</span>
+                      <button
+                        type="button"
+                        className="ca-file-remove"
+                        onClick={() => {
+                          setPaymentProofFile(null);
+                          if (paymentFileRef.current) paymentFileRef.current.value = "";
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="ca-file-upload-btn" onClick={() => paymentFileRef.current?.click()}>
+                      <Upload size={18} />
+                      <span>Upload Screenshot</span>
+                    </button>
+                  )}
+                  <input
+                    type="file"
+                    ref={paymentFileRef}
+                    hidden
+                    accept=".jpg,.jpeg,.png,.webp,.pdf"
+                    onChange={(e) => {
+                      if (e.target.files[0]) setPaymentProofFile(e.target.files[0]);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="ca-submit-btn" disabled={payingFineId === paymentTargetFine.fine_id}>
+                <span>{payingFineId === paymentTargetFine.fine_id ? "Submitting..." : "Submit Payment"}</span>
               </button>
             </form>
           </div>
