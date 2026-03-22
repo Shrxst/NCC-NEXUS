@@ -18,7 +18,7 @@ import {
 
 import "./meetingModule.css";
 
-const WaitingRoomScreen = ({ meeting, basePath = "/meetings" }) => {
+const WaitingRoomScreen = ({ meeting, basePath = "/meetings", onBack, onJoinRoom }) => {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -48,12 +48,12 @@ const WaitingRoomScreen = ({ meeting, basePath = "/meetings" }) => {
           String(meetingId) === String(meeting.id) &&
           Number(userId) === Number(currentUser.id)
         ) {
-          navigate(`${basePath}/${meeting.id}/room`);
+          if (onJoinRoom) { onJoinRoom(meeting.id); } else { navigate(`${basePath}/${meeting.id}/room`); }
         }
       },
 
       onMeetingEnded: () => {
-        navigate(basePath);
+        if (onBack) { onBack(); } else { navigate(basePath); }
       }
     });
 
@@ -65,7 +65,7 @@ const WaitingRoomScreen = ({ meeting, basePath = "/meetings" }) => {
   if (isAdmitted) return null;
 
   const handleLeave = () => {
-    navigate(basePath);
+    if (onBack) { onBack(); } else { navigate(basePath); }
   };
 
   return (

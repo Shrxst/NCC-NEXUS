@@ -37,8 +37,9 @@ const toIsoIfLocalDateTime = (value) => {
   return parsed.toISOString();
 };
 
-const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
-  const { meetingId } = useParams();
+const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings", meetingIdProp, onBack, onJoinRoom, onViewReport }) => {
+  const params = useParams();
+  const meetingId = meetingIdProp || params.meetingId;
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const role = getCurrentRole();
@@ -182,22 +183,37 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
   const startMeeting = () => {
     dispatch(updateMeetingStatusAsync({ meetingId: meeting.id, status: MEETING_STATUS.LIVE }));
     dispatch(setCurrentMeeting({ meetingId: meeting.id, userId: currentUser.id }));
-    navigate(`${basePath}/${meeting.id}/room`);
+    if (onJoinRoom) {
+      onJoinRoom(meeting.id);
+    } else {
+      navigate(`${basePath}/${meeting.id}/room`);
+    }
   };
 
   const handleDelete = () => {
     dispatch(deleteMeeting({ meetingId: meeting.id }));
-    navigate(basePath);
+    if (onBack) {
+      onBack();
+    } else {
+      navigate(basePath);
+    }
   };
 
   return (
     <div className={embedded ? "meeting-page meeting-page-embedded" : "meeting-page"}>
       {/* Header with back button */}
       <div className="meeting-detail-header">
-        <Link className="meeting-back-link" to={basePath}>
-          <ArrowLeft size={18} />
-          Back to Meetings
-        </Link>
+        {onBack ? (
+          <button type="button" className="meeting-back-link" onClick={onBack}>
+            <ArrowLeft size={18} />
+            Back to Meetings
+          </button>
+        ) : (
+          <Link className="meeting-back-link" to={basePath}>
+            <ArrowLeft size={18} />
+            Back to Meetings
+          </Link>
+        )}
       </div>
 
       {/* Title section */}
@@ -215,28 +231,36 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
       <div className="meeting-detail-info-card">
         <div className="meeting-detail-info-grid">
           <div className="meeting-detail-info-row">
-            <CalendarDays size={18} />
+            <div className="meet-icon-box meet-icon-red">
+              <CalendarDays size={20} />
+            </div>
             <div>
               <label>Date & Time</label>
               <p>{formatMeetingDateTime(meeting.dateTime)}</p>
             </div>
           </div>
           <div className="meeting-detail-info-row">
-            <Tag size={18} />
+            <div className="meet-icon-box meet-icon-blue">
+              <Tag size={20} />
+            </div>
             <div>
               <label>Meeting Type</label>
               <p>{meeting.meetingType}</p>
             </div>
           </div>
           <div className="meeting-detail-info-row">
-            <Users size={18} />
+            <div className="meet-icon-box meet-icon-indigo">
+              <Users size={20} />
+            </div>
             <div>
               <label>Participants</label>
               <p>{participants.length} joined &middot; {(meeting.invitedUserIds || []).length} invited</p>
             </div>
           </div>
           <div className="meeting-detail-info-row meeting-detail-info-full">
-            <FileText size={18} />
+            <div className="meet-icon-box meet-icon-navy">
+              <FileText size={20} />
+            </div>
             <div>
               <label>Description</label>
               <p>{meeting.description || "No description provided."}</p>
@@ -335,6 +359,7 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
             meeting={meeting}
             basePath={basePath}
             canToggleBriefing={host}
+            onViewDetails={onBack ? () => {} : undefined}
           />
           <WaitingRoomPanel meetingId={meeting.id} />
         </div>
@@ -343,21 +368,39 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings" }) => {
       {/* Bottom actions */}
       <div className="meeting-detail-footer">
         {!authority && isLive ? (
-          <Link className="meeting-btn meeting-btn-primary meeting-btn-lg" to={`${basePath}/${meeting.id}/room`}>
-            Join Meeting
-          </Link>
+          onJoinRoom ? (
+            <button type="button" className="meeting-btn meeting-btn-primary meeting-btn-lg" onClick={() => onJoinRoom(meeting.id)}>
+              Join Meeting
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-primary meeting-btn-lg" to={`${basePath}/${meeting.id}/room`}>
+              Join Meeting
+            </Link>
+          )
         ) : null}
 
         {authority && isLive ? (
-          <Link className="meeting-btn meeting-btn-primary meeting-btn-lg" to={`${basePath}/${meeting.id}/room`}>
-            Open Room
-          </Link>
+          onJoinRoom ? (
+            <button type="button" className="meeting-btn meeting-btn-primary meeting-btn-lg" onClick={() => onJoinRoom(meeting.id)}>
+              Open Room
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-primary meeting-btn-lg" to={`${basePath}/${meeting.id}/room`}>
+              Open Room
+            </Link>
+          )
         ) : null}
 
         {isCompleted ? (
-          <Link className="meeting-btn meeting-btn-completed meeting-btn-lg" to={`${basePath}/${meeting.id}/report`}>
-            {authority ? "View Full Report" : "View Summary"}
-          </Link>
+          onViewReport ? (
+            <button type="button" className="meeting-btn meeting-btn-completed meeting-btn-lg" onClick={() => onViewReport(meeting.id)}>
+              {authority ? "View Full Report" : "View Summary"}
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-completed meeting-btn-lg" to={`${basePath}/${meeting.id}/report`}>
+              {authority ? "View Full Report" : "View Summary"}
+            </Link>
+          )
         ) : null}
       </div>
     </div>

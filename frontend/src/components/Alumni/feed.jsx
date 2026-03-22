@@ -55,6 +55,139 @@ const formatTextWithMentions = (text) => {
   return parts.length > 0 ? parts : text;
 };
 
+/* ===== REACTION BUTTON WITH LONG-PRESS PICKER ===== */
+const REACTION_EMOJIS = [
+  { key: "like", icon: "\u{1F44D}" },
+  { key: "love", icon: "\u{2764}\u{FE0F}" },
+  { key: "fire", icon: "\u{1F525}" },
+  { key: "clap", icon: "\u{1F44F}" },
+  { key: "laugh", icon: "\u{1F602}" },
+  { key: "wow", icon: "\u{1F62E}" },
+];
+const HOLD_MS = 500;
+
+function FeedReactButton({ liked, likeCount, onToggleLike, chosenEmoji, onPickEmoji }) {
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const holdTimer = React.useRef(null);
+  const didLongPress = React.useRef(false);
+  const wrapRef = React.useRef(null);
+
+  const activeEmoji = liked ? (chosenEmoji || "\u{2764}\u{FE0F}") : "\u{1F44D}";
+
+  const startHold = React.useCallback(() => {
+    didLongPress.current = false;
+    holdTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      setPickerOpen(true);
+    }, HOLD_MS);
+  }, []);
+
+  const cancelHold = React.useCallback(() => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+
+  const handleClick = React.useCallback(() => {
+    if (didLongPress.current) return;
+    onToggleLike();
+    if (!liked) onPickEmoji("\u{1F44D}");
+  }, [onToggleLike, liked, onPickEmoji]);
+
+  const pickReaction = React.useCallback((emoji) => {
+    setPickerOpen(false);
+    onPickEmoji(emoji);
+    if (!liked) onToggleLike();
+  }, [liked, onToggleLike, onPickEmoji]);
+
+  const handleContextMenu = React.useCallback((e) => {
+    e.preventDefault();
+    setPickerOpen(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!pickerOpen) return;
+    const close = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setPickerOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("touchstart", close); };
+  }, [pickerOpen]);
+
+  return (
+    <div
+      className="feed-react-wrap"
+      ref={wrapRef}
+      onMouseDown={startHold}
+      onMouseUp={cancelHold}
+      onMouseLeave={cancelHold}
+      onTouchStart={startHold}
+      onTouchEnd={cancelHold}
+      onContextMenu={handleContextMenu}
+    >
+      <button
+        type="button"
+        className={`feed-action-btn${liked ? " liked" : ""}`}
+        onClick={handleClick}
+      >
+        <span className="feed-react-emoji">{activeEmoji}</span>
+        <span>{liked ? "Reacted" : "React"}</span>
+      </button>
+      {pickerOpen ? (
+        <div className="feed-reaction-picker">
+          {REACTION_EMOJIS.map((item) => (
+            <button key={item.key} type="button" onClick={() => pickReaction(item.icon)}>
+              {item.icon}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ===== LIKERS POPUP ===== */
+function LikersPopup({ likeCount, liked, profileName, onClose }) {
+  const popupRef = React.useRef(null);
+  const othersCount = liked ? likeCount - 1 : likeCount;
+
+  React.useEffect(() => {
+    const close = (e) => {
+      if (popupRef.current && !popupRef.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [onClose]);
+
+  return (
+    <div className="feed-likers-popup" ref={popupRef}>
+      <div className="feed-likers-header">
+        <span>Reactions</span>
+        <button type="button" onClick={onClose}>&times;</button>
+      </div>
+      <div className="feed-likers-list">
+        {liked && (
+          <div className="feed-liker-item">
+            <div className="feed-liker-avatar">{(profileName || "Y").charAt(0)}</div>
+            <span className="feed-liker-name">You</span>
+          </div>
+        )}
+        {othersCount > 0 && (
+          <div className="feed-liker-item">
+            <div className="feed-liker-avatar feed-liker-others">+{othersCount}</div>
+            <span className="feed-liker-name">{othersCount} other{othersCount !== 1 ? "s" : ""}</span>
+          </div>
+        )}
+        {likeCount === 0 && (
+          <p className="feed-likers-empty">No reactions yet</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ===== RECURSIVE REPLY COMPONENT ===== */
 const ReplyItem = ({ reply, postId, commentId, profileName, formatTime, toggleReplyLike, deleteReply, setReplyingTo, replyingTo, replyText, setReplyText, addReply, depth = 0 }) => {
   const hasReplies = reply.replies && reply.replies.length > 0;
@@ -166,6 +299,8 @@ export default function Feed({
   const [commentSort, setCommentSort] = useState("newest"); // "newest" | "oldest"
   const [expandedReplies, setExpandedReplies] = useState({});
   const [showEmojiPicker, setShowEmojiPicker] = useState(null);
+  const [chosenEmojis, setChosenEmojis] = useState({});
+  const [likersPopupId, setLikersPopupId] = useState(null);
 
   const imageRef = useRef(null);
   const videoRef = useRef(null);
@@ -1124,7 +1259,7 @@ export default function Feed({
                   className="feed-side-link"
                   onClick={() => scrollToPost(announcement.id)}
                 >
-                  View post â€º
+                  View post &rsaquo;
                 </button>
               </div>
             ))
@@ -1135,7 +1270,7 @@ export default function Feed({
 
         {/* ===== POSTS ===== */}
         {timelinePosts.map((p) => (
-          <div className={`feed-card${commentPost?.id === p.id ? " feed-card-expanded" : ""}`} key={p.id} id={`feed-post-${p.id}`}>
+          <div className="feed-card" key={p.id} id={`feed-post-${p.id}`}>
             <div className="feed-card-content">
             <div className="feed-card-header">
               <div className="feed-user">
@@ -1148,7 +1283,7 @@ export default function Feed({
                     {p.name} <span className="feed-role">{p.role}</span>
                   </h3>
                   <p className="feed-meta">
-                    {formatTime(p.createdAt)} â€¢ PUBLIC FEED
+                    {formatTime(p.createdAt)} &bull; PUBLIC FEED
                   </p>
                 </div>
               </div>
@@ -1185,18 +1320,38 @@ export default function Feed({
               <span className="stat-item">
                 <Eye size={14} /> {p.views || 0} views
               </span>
+              {getPostLikeCount(p) > 0 ? (
+                <span
+                  className="stat-item feed-reactions-stat"
+                  onClick={() => setLikersPopupId(likersPopupId === p.id ? null : p.id)}
+                >
+                  <span className="feed-reaction-icons">
+                    {REACTION_EMOJIS
+                      .filter((_, i) => i === 0 || (chosenEmojis[p.id] && chosenEmojis[p.id] === REACTION_EMOJIS[i]?.icon))
+                      .slice(0, 3)
+                      .map((item, i) => (
+                        <span key={item.key} className="feed-reaction-icon-circle" style={{ zIndex: 3 - i }}>{item.icon}</span>
+                      ))}
+                  </span>
+                  {getPostLikeCount(p)} reactions
+                  {likersPopupId === p.id && (
+                    <LikersPopup likeCount={getPostLikeCount(p)} liked={p.liked} profileName={profileName} onClose={() => setLikersPopupId(null)} />
+                  )}
+                </span>
+              ) : null}
+              <span className="stat-item">
+                <MessageCircle size={14} /> {getPostCommentCount(p)} comments
+              </span>
             </div>
 
             <div className="feed-actions-row">
-              <button
-                type="button"
-                className="feed-action-btn"
-                onClick={() => toggleLike(p.id)}
-              >
-                <Heart size={16} fill={p.liked ? "red" : "none"} />
-                <span>Like</span>
-                <span className="feed-action-count">{getPostLikeCount(p)}</span>
-              </button>
+              <FeedReactButton
+                liked={p.liked}
+                likeCount={getPostLikeCount(p)}
+                onToggleLike={() => toggleLike(p.id)}
+                chosenEmoji={chosenEmojis[p.id]}
+                onPickEmoji={(emoji) => setChosenEmojis((prev) => ({ ...prev, [p.id]: emoji }))}
+              />
 
               <button
                 type="button"
@@ -1205,9 +1360,6 @@ export default function Feed({
               >
                 <MessageCircle size={16} />
                 <span>Comment</span>
-                <span className="feed-action-count">
-                  {getPostCommentCount(p)}
-                </span>
               </button>
             </div>
             </div>{/* end feed-card-content */}

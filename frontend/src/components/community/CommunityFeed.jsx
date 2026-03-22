@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, ShieldCheck, Sparkles } from "lucide-react";
+import { Clock, Plus, ShieldCheck, Sparkles } from "lucide-react";
 import CreatePostForm from "./CreatePostForm";
 import PostCard from "./PostCard";
 import ModerationQueue from "./ModerationQueue";
@@ -27,6 +27,16 @@ const normalizeCommentRole = (item) => {
   if (item.rank_name === "Senior Under Officer") return "suo";
   return "cadet";
 };
+
+function timeAgo(ts) {
+  const ms = Date.now() - Number(ts || 0);
+  const m = Math.floor(ms / (1000 * 60));
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 function mapBackendCommentsToUi(comments = []) {
   const byId = new Map();
@@ -186,6 +196,7 @@ export default function CommunityFeed() {
   const [communityLogo, setCommunityLogo] = useState(nccLogo);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [feedError, setFeedError] = useState("");
+  const [userReactions, setUserReactions] = useState({});
 
   const refreshFeed = async () => {
     try {
@@ -283,6 +294,15 @@ export default function CommunityFeed() {
     const reaction = REACTION_TO_BACKEND[reactionType];
     if (!reaction) return;
     try {
+      setUserReactions((prev) => {
+        const next = { ...prev };
+        if (next[postId] === reactionType) {
+          delete next[postId];
+        } else {
+          next[postId] = reactionType;
+        }
+        return next;
+      });
       await communityApi.reactToPost(postId, reaction);
       await refreshFeed();
     } catch (error) {
@@ -434,6 +454,7 @@ export default function CommunityFeed() {
                 canDelete={post.canDelete}
                 canPost={canPost}
                 canComment={canComment}
+                activeReaction={userReactions[post.id] || null}
                 onEdit={(value) => {
                   setEditingPost(value);
                   setShowCreateModal(true);
@@ -456,6 +477,7 @@ export default function CommunityFeed() {
                 canDelete={post.canDelete}
                 canPost={canPost}
                 canComment={canComment}
+                activeReaction={userReactions[post.id] || null}
                 onEdit={(value) => {
                   setEditingPost(value);
                   setShowCreateModal(true);
@@ -474,6 +496,36 @@ export default function CommunityFeed() {
             ) : null}
           </section>
         </section>
+
+        <aside className="community-right-column">
+          <div className="community-recent-updates-card">
+            <h3>
+              <Clock size={15} />
+              Recent Updates
+            </h3>
+            <div className="community-recent-list">
+              {visiblePosts.slice(0, 5).map((post) => (
+                <div key={post.id} className="community-recent-item">
+                  <div className="community-recent-avatar">
+                    {post.authorAvatar ? (
+                      <img src={post.authorAvatar} alt="" />
+                    ) : (
+                      (post.author || "N").slice(0, 1)
+                    )}
+                  </div>
+                  <div className="community-recent-info">
+                    <strong>{post.author}</strong>
+                    <p>{(post.content || "").slice(0, 120)}{(post.content || "").length > 120 ? "…" : ""}</p>
+                    <span className="community-recent-time">{timeAgo(post.timestamp)}</span>
+                  </div>
+                </div>
+              ))}
+              {!loadingFeed && !visiblePosts.length ? (
+                <p className="community-muted-text" style={{ fontSize: "0.82rem", textAlign: "center", padding: "12px 0" }}>No recent updates</p>
+              ) : null}
+            </div>
+          </div>
+        </aside>
       </div>
 
       {showCreateModal ? (

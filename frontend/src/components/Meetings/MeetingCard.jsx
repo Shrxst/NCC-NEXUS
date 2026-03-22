@@ -11,7 +11,7 @@ import {
   isMeetingHost,
 } from "./meetingUtils";
 
-const MeetingCard = ({ meeting, role, currentUser, participants = [], detailsPath, roomPath, reportPath }) => {
+const MeetingCard = ({ meeting, role, currentUser, participants = [], detailsPath, roomPath, reportPath, onViewDetails, onJoinRoom, onViewReport }) => {
   const invited = isInvitedToMeeting(meeting, currentUser.id, role);
   const isHost = isMeetingHost(meeting, currentUser.id);
   const authority = isAuthority(role);
@@ -60,15 +60,27 @@ const MeetingCard = ({ meeting, role, currentUser, participants = [], detailsPat
       </div>
 
       <div className="meeting-card-actions">
-        <Link className="meeting-btn meeting-btn-secondary" to={detailsPath}>
-          Details
-        </Link>
+        {onViewDetails ? (
+          <button type="button" className="meeting-btn meeting-btn-secondary" onClick={() => onViewDetails(meeting.id)}>
+            Details
+          </button>
+        ) : (
+          <Link className="meeting-btn meeting-btn-secondary" to={detailsPath}>
+            Details
+          </Link>
+        )}
 
         {/* Cadet actions */}
         {!authority && isLive && canJoin ? (
-          <Link className="meeting-btn meeting-btn-primary" to={roomPath}>
-            Join Meeting
-          </Link>
+          onJoinRoom ? (
+            <button type="button" className="meeting-btn meeting-btn-primary" onClick={() => onJoinRoom(meeting.id)}>
+              Join Meeting
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-primary" to={roomPath}>
+              Join Meeting
+            </Link>
+          )
         ) : null}
 
         {!authority && isScheduled ? (
@@ -78,22 +90,40 @@ const MeetingCard = ({ meeting, role, currentUser, participants = [], detailsPat
         ) : null}
 
         {!authority && isCompleted ? (
-          <Link className="meeting-btn meeting-btn-completed" to={reportPath || `${detailsPath}/report`}>
-            View Summary
-          </Link>
+          onViewReport ? (
+            <button type="button" className="meeting-btn meeting-btn-completed" onClick={() => onViewReport(meeting.id)}>
+              View Summary
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-completed" to={reportPath || `${detailsPath}/report`}>
+              View Summary
+            </Link>
+          )
         ) : null}
 
         {/* Authority actions */}
         {authority && isLive ? (
-          <Link className="meeting-btn meeting-btn-primary" to={roomPath}>
-            Open Room
-          </Link>
+          onJoinRoom ? (
+            <button type="button" className="meeting-btn meeting-btn-primary" onClick={() => onJoinRoom(meeting.id)}>
+              Open Room
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-primary" to={roomPath}>
+              Open Room
+            </Link>
+          )
         ) : null}
 
         {authority && isCompleted ? (
-          <Link className="meeting-btn meeting-btn-completed" to={reportPath || `${detailsPath}/report`}>
-            View Report
-          </Link>
+          onViewReport ? (
+            <button type="button" className="meeting-btn meeting-btn-completed" onClick={() => onViewReport(meeting.id)}>
+              View Report
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-completed" to={reportPath || `${detailsPath}/report`}>
+              View Report
+            </Link>
+          )
         ) : null}
       </div>
     </article>

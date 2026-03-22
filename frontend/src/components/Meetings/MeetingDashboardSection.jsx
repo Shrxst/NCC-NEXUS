@@ -12,7 +12,7 @@ import {
 } from "./meetingUtils";
 import "./meetingModule.css";
 
-const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", basePath = "/meetings", onNavigate }) => {
+const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", basePath = "/meetings", onNavigate, onViewDetails, onJoinRoom, onViewReport }) => {
   const dispatch = useDispatch();
   const role = getCurrentRole();
   const user = getCurrentUser();
@@ -72,7 +72,11 @@ const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", 
             <span className="meeting-live-dot" />
             <strong>Live Now:</strong> {liveMeeting.title}
           </div>
-          <Link to={`${basePath}/${liveMeeting.id}/room`}>Join Now</Link>
+          {onJoinRoom ? (
+            <button type="button" className="meeting-btn meeting-btn-primary" onClick={() => onJoinRoom(liveMeeting.id)}>Join Now</button>
+          ) : (
+            <Link to={`${basePath}/${liveMeeting.id}/room`}>Join Now</Link>
+          )}
         </div>
       ) : null}
 
@@ -88,6 +92,9 @@ const MeetingDashboardSection = ({ sectionTitle = "Meetings", mode = "INVITED", 
               detailsPath={`${basePath}/${meeting.id}`}
               roomPath={`${basePath}/${meeting.id}/room`}
               reportPath={`${basePath}/${meeting.id}/report`}
+              onViewDetails={onViewDetails}
+              onJoinRoom={onJoinRoom}
+              onViewReport={onViewReport}
             />
           ))}
         </div>

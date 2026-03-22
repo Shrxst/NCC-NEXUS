@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, UserPlus, X } from "lucide-react";
+import { ArrowLeft, Search, UserPlus, X, CheckCircle } from "lucide-react";
 import { createMeetingAsync } from "../../store/meetingSlice";
 import { API_BASE_URL } from "../../api/config";
 import { MEETING_TYPES, canCreateMeeting, getCurrentRole, getCurrentUser } from "./meetingUtils";
@@ -20,7 +20,7 @@ const toLocalDateTimeMin = () => {
   return local.toISOString().slice(0, 16);
 };
 
-const MeetingCreatePage = ({ embedded = false, basePath = "/meetings" }) => {
+const MeetingCreatePage = ({ embedded = false, basePath = "/meetings", onCreated, onCancel }) => {
   const role = getCurrentRole();
   const currentUser = getCurrentUser();
   const dispatch = useDispatch();
@@ -41,6 +41,7 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings" }) => {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [successPopup, setSuccessPopup] = useState(null);
   const minDateTime = useMemo(() => toLocalDateTimeMin(), []);
 
   const roleAllowed = canCreateMeeting(role);
@@ -175,12 +176,12 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings" }) => {
     dispatch(createMeetingAsync(payload))
       .unwrap()
       .then((created) => {
-        if (embedded && onCreated) {
+        if (embedded) {
           setForm({ title: "", description: "", dateTime: "", meetingType: "General", restricted: false });
           setSelectedUsers([]);
           setSearch("");
           setRoleFilter("ALL");
-          onCreated(created);
+          setSuccessPopup(created?.title || "Meeting");
         } else {
           navigate(`${basePath}/${created.id}`);
         }
@@ -208,6 +209,38 @@ const MeetingCreatePage = ({ embedded = false, basePath = "/meetings" }) => {
           <p>Fill in the details below and select participants.</p>
         </div>
       </div>
+
+      {successPopup && (
+        <div
+          className="meeting-popup-overlay"
+          onClick={() => {
+            setSuccessPopup(null);
+            if (onCreated) onCreated();
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        >
+          <div className="meeting-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="meeting-popup-icon">
+              <CheckCircle size={48} />
+            </div>
+            <h2 className="meeting-popup-title">Meeting Created!</h2>
+            <p className="meeting-popup-desc">
+              <strong>"{successPopup}"</strong> has been scheduled successfully. All invited participants will be notified.
+            </p>
+            <button
+              type="button"
+              className="meeting-btn meeting-btn-primary meeting-popup-btn"
+              onClick={() => {
+                setSuccessPopup(null);
+                if (onCreated) onCreated();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         {/* Step 1: Meeting Details */}

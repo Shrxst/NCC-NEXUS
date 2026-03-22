@@ -12,7 +12,7 @@ import {
 } from "./meetingUtils";
 import "./meetingModule.css";
 
-const MeetingListSection = ({ title, meetings, emptyMessage, role, currentUser, participants, basePath }) => (
+const MeetingListSection = ({ title, meetings, emptyMessage, role, currentUser, participants, basePath, onViewDetails, onJoinRoom, onViewReport }) => (
   <section className="meeting-list-section">
     <h3>{title}</h3>
     {meetings.length ? (
@@ -27,6 +27,9 @@ const MeetingListSection = ({ title, meetings, emptyMessage, role, currentUser, 
             detailsPath={`${basePath}/${meeting.id}`}
             roomPath={`${basePath}/${meeting.id}/room`}
             reportPath={`${basePath}/${meeting.id}/report`}
+            onViewDetails={onViewDetails}
+            onJoinRoom={onJoinRoom}
+            onViewReport={onViewReport}
           />
         ))}
       </div>
@@ -36,7 +39,7 @@ const MeetingListSection = ({ title, meetings, emptyMessage, role, currentUser, 
   </section>
 );
 
-const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateLink = false }) => {
+const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateLink = false, onViewDetails, onJoinRoom, onViewReport, onCreateMeeting }) => {
   const dispatch = useDispatch();
   const role = getCurrentRole();
   const currentUser = getCurrentUser();
@@ -67,9 +70,15 @@ const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateL
         </div>
 
         {canCreateMeeting(role) && !hideCreateLink ? (
-          <Link className="meeting-btn meeting-btn-primary" to={`${basePath}/create`}>
-            Create Meeting
-          </Link>
+          onCreateMeeting ? (
+            <button type="button" className="meeting-btn meeting-btn-primary" onClick={onCreateMeeting}>
+              Create Meeting
+            </button>
+          ) : (
+            <Link className="meeting-btn meeting-btn-primary" to={`${basePath}/create`}>
+              Create Meeting
+            </Link>
+          )
         ) : null}
       </div>
 
@@ -88,6 +97,9 @@ const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateL
               currentUser={currentUser}
               participants={participants}
               basePath={basePath}
+              onViewDetails={onViewDetails}
+              onJoinRoom={onJoinRoom}
+              onViewReport={onViewReport}
             />
           ) : null}
 
@@ -99,6 +111,9 @@ const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateL
             currentUser={currentUser}
             participants={participants}
             basePath={basePath}
+            onViewDetails={onViewDetails}
+            onJoinRoom={onJoinRoom}
+            onViewReport={onViewReport}
           />
 
           {past.length > 0 ? (
@@ -110,6 +125,9 @@ const MeetingListPage = ({ embedded = false, basePath = "/meetings", hideCreateL
               currentUser={currentUser}
               participants={participants}
               basePath={basePath}
+              onViewDetails={onViewDetails}
+              onJoinRoom={onJoinRoom}
+              onViewReport={onViewReport}
             />
           ) : null}
         </>

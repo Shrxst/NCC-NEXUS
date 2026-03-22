@@ -9,6 +9,7 @@ const AuthorityControlPanel = ({
   meeting,
   basePath = "/meetings",
   canToggleBriefing = true,
+  onViewDetails,
 }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ const AuthorityControlPanel = ({
 
   const endMeeting = () => {
     dispatch(updateMeetingStatusAsync({ meetingId: meeting.id, status: MEETING_STATUS.ENDED }));
-    navigate(`${basePath}/${meeting.id}`);
+    if (onViewDetails) { onViewDetails(meeting.id); } else { navigate(`${basePath}/${meeting.id}`); }
   };
 
   const handleBriefingToggle = () => {

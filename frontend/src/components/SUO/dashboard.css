@@ -1053,6 +1053,91 @@
 }
 
 /* ── Section Title ── */
+/* ── MEETING LAUNCH CARD ── */
+.suo-meeting-launch-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 4px 18px rgba(92, 107, 192, 0.08);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeSlideUp 0.5s ease 0.22s both;
+  transition: box-shadow 0.25s, transform 0.25s;
+}
+.suo-meeting-launch-card:hover {
+  box-shadow: 0 8px 28px rgba(92, 107, 192, 0.14);
+  transform: translateY(-1px);
+}
+.suo-meeting-launch-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--s-primary), #7986CB, var(--s-navy));
+  background-size: 200% 100%;
+  animation: shimmer 3s ease infinite;
+}
+
+.suo-meeting-launch-icon {
+  width: 46px; height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--s-primary), var(--s-navy));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(92, 107, 192, 0.25);
+}
+
+.suo-meeting-launch-info {
+  flex: 1; min-width: 0;
+}
+.suo-meeting-launch-info h3 {
+  margin: 0;
+  font-family: var(--s-font-display);
+  font-size: 1.05rem;
+  color: var(--s-navy);
+}
+.suo-meeting-launch-info p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--s-text-secondary);
+}
+
+.suo-meeting-launch-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 22px;
+  border: none; border-radius: 10px;
+  background: linear-gradient(135deg, var(--s-primary), var(--s-navy));
+  color: #fff;
+  font-family: var(--s-font);
+  font-size: 0.88rem; font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 14px rgba(92, 107, 192, 0.3);
+}
+.suo-meeting-launch-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(92, 107, 192, 0.4);
+}
+
+@media (max-width: 600px) {
+  .suo-meeting-launch-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+  }
+  .suo-meeting-launch-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .suo-dashboard .section-title {
   margin: 32px 0 0;
   font-family: var(--s-font-display);

@@ -48,9 +48,9 @@ const formatTimer = (seconds) => {
   return `${hh}:${mm}:${ss}`;
 };
 
-const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
-  const { meetingId: rawMeetingId } = useParams();
-  const meetingId = String(rawMeetingId || "").replace(/^:/, "");
+const MeetingRoomPage = ({ embedded = false, basePath = "/meetings", meetingIdProp, onBack, onViewDetails }) => {
+  const params = useParams();
+  const meetingId = String(meetingIdProp || params.meetingId || "").replace(/^:/, "");
   const role = getCurrentRole();
   const currentUser = getCurrentUser();
 
@@ -211,7 +211,7 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
       },
 
       onMeetingEnded: () => {
-        navigate(basePath);
+        if (onBack) { onBack(); } else { navigate(basePath); }
       },
     });
 
@@ -327,15 +327,21 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
       <div className="meeting-page">
         <div className="meeting-empty">Join is enabled only when the meeting is LIVE.</div>
 
-        <Link className="meeting-btn meeting-btn-secondary" to={`${basePath}/${meeting.id}`}>
-          Back to Details
-        </Link>
+        {onViewDetails ? (
+          <button type="button" className="meeting-btn meeting-btn-secondary" onClick={() => onViewDetails(meeting.id)}>
+            Back to Details
+          </button>
+        ) : (
+          <Link className="meeting-btn meeting-btn-secondary" to={`${basePath}/${meeting.id}`}>
+            Back to Details
+          </Link>
+        )}
       </div>
     );
   }
 
   if (!canEnterDirectly && !isAdmitted) {
-    return <WaitingRoomScreen meeting={meeting} basePath={basePath} />;
+    return <WaitingRoomScreen meeting={meeting} basePath={basePath} onBack={onBack} onJoinRoom={onBack ? () => {} : undefined} />;
   }
 
   const leaveRoom = () => {
@@ -347,7 +353,7 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
     );
 
     dispatch(setConnectionStatus("DISCONNECTED"));
-    navigate(`${basePath}/${meeting.id}`);
+    if (onViewDetails) { onViewDetails(meeting.id); } else { navigate(`${basePath}/${meeting.id}`); }
   };
 
   const togglePanel = (panel) => {
@@ -392,6 +398,7 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings" }) => {
                   meeting={meeting}
                   basePath={basePath}
                   canToggleBriefing={host}
+                  onViewDetails={onViewDetails}
                 />
                 <WaitingRoomPanel meetingId={meeting.id} />
               </div>
