@@ -1,6 +1,7 @@
 import React from 'react';
 import ChatTabs from './ChatTabs';
 import ChatList from './ChatList';
+import nccLogo from '../assets/ncc-logo.png';
 
 const ChatSidebar = ({
   isHidden,
@@ -17,15 +18,13 @@ const ChatSidebar = ({
   error,
   onRetry,
 }) => {
-  const initials = String(currentUserName || 'Me').substring(0, 2).toUpperCase();
-
   return (
     <div className={`chat-sidebar ${isHidden ? 'hidden' : ''}`}>
       <div className="chat-header">
-        <div className="avatar-circle" style={{ width: 35, height: 35, fontSize: '0.8rem' }}>
-          {initials}
+        <div className="chat-sidebar-brand">
+          <img src={nccLogo} alt="NCC logo" className="chat-sidebar-logo" />
+          <div className="chat-sidebar-title">NCC Chats</div>
         </div>
-        <div style={{ fontWeight: 'bold' }}>NCC Chats</div>
       </div>
 
       <div className="sidebar-search">
