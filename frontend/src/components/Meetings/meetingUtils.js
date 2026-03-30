@@ -41,10 +41,21 @@ export const getCurrentUser = () => {
   const tokenPayload = decodeJwtPayload(localStorage.getItem("token") || "");
   const id = Number(stored.user_id || stored.id || tokenPayload?.user_id || 0);
   const role = getCurrentRole();
+  const displayName =
+    String(
+      stored.name ||
+      stored.full_name ||
+      stored.username ||
+      tokenPayload?.name ||
+      tokenPayload?.username ||
+      ""
+    ).trim() ||
+    (stored.email ? String(stored.email).split("@")[0].trim() : "") ||
+    (role === "ANO" ? "ANO" : role === "SUO" ? "SUO" : role === "ALUMNI" ? "Alumni" : "Cadet");
 
   return {
     id,
-    name: stored.name || stored.username || "NCC User",
+    name: displayName,
     role,
   };
 };

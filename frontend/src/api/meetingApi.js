@@ -197,6 +197,18 @@ export const meetingApi = {
     };
   },
 
+  deleteMeeting: async ({ meetingId }) => {
+    const id = normalizeMeetingId(meetingId);
+    const response = await client.delete(`/${id}`);
+    return {
+      ...response,
+      data: {
+        meeting: mapMeetingToFrontend(response.data?.meeting || {}),
+        message: response.data?.message || "Meeting deleted successfully",
+      },
+    };
+  },
+
   getWaitingList: async (meetingId) => {
     const id = normalizeMeetingId(meetingId);
     const response = await client.get(`/${id}/waiting`);

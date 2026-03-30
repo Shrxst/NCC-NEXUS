@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Trash2, CalendarDays, Tag, FileText, Users, ArrowLeft, Play, Edit3 } from "lucide-react";
-import { deleteMeeting, editMeeting, setCurrentMeeting, updateMeetingStatusAsync, fetchMeetingById, fetchParticipants } from "../../store/meetingSlice";
+import { deleteMeetingAsync, editMeeting, setCurrentMeeting, updateMeetingStatusAsync, fetchMeetingById, fetchParticipants } from "../../store/meetingSlice";
 import { API_BASE_URL } from "../../api/config";
 import {
   MEETING_STATUS,
@@ -200,12 +200,17 @@ const MeetingDetailsPage = ({ embedded = false, basePath = "/meetings", meetingI
     }
   };
 
-  const handleDelete = () => {
-    dispatch(deleteMeeting({ meetingId: meeting.id }));
-    if (onBack) {
-      onBack();
-    } else {
-      navigate(basePath);
+  const handleDelete = async () => {
+    try {
+      await dispatch(deleteMeetingAsync({ meetingId: meeting.id })).unwrap();
+
+      if (onBack) {
+        onBack();
+      } else {
+        navigate(basePath);
+      }
+    } catch (error) {
+      alert(error?.message || "Failed to delete meeting.");
     }
   };
 

@@ -29,6 +29,7 @@ const anoLogin = async (req, res) => {
       token,
       user: {
         user_id: user.user_id,
+        name: user.username || "ANO",
         role: "ANO",
         email: user.email,
       },

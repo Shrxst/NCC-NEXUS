@@ -37,7 +37,15 @@ const AnoLogin = ({ isModal = false, onClose }) => {
         // ✅ SUCCESS: Save Token & Role
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", "ANO"); // Critical for security checks
-        localStorage.setItem("user", JSON.stringify(data.user));
+        localStorage.setItem("system_role", data.user?.role || "ANO");
+        localStorage.setItem("rank", data.user?.rank || "");
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            ...(data.user || {}),
+            name: data.user?.name || data.user?.username || "ANO",
+          })
+        );
 
         // ❌ REMOVED: Alert("✅ Login Successful!"); 
 

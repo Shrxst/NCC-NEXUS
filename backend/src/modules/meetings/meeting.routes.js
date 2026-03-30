@@ -98,4 +98,12 @@ router.patch(
   meetingController.leaveMeeting
 );
 
+// Delete Meeting
+router.delete(
+  "/:meetingId",
+  authenticate,
+  requireMeetingManager,
+  meetingController.deleteMeeting
+);
+
 module.exports = router;

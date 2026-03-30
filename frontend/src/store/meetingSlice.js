@@ -103,6 +103,16 @@ export const leaveMeetingAsync = createAsyncThunk(
   }
 );
 
+export const deleteMeetingAsync = createAsyncThunk(
+  "meetings/deleteMeeting",
+  async ({ meetingId }) => {
+    await meetingApi.deleteMeeting({ meetingId });
+    return {
+      meetingId: String(meetingId),
+    };
+  }
+);
+
 export const fetchParticipants = createAsyncThunk(
   "meetings/fetchParticipants",
   async (meetingId) => {
@@ -405,6 +415,21 @@ const meetingsSlice = createSlice({
       state.participants[meetingId] = (state.participants[meetingId] || []).filter(
         (p) => Number(p.userId) !== Number(userId)
       );
+      saveParticipants(state.participants);
+    });
+
+    builder.addCase(deleteMeetingAsync.fulfilled, (state, action) => {
+      state.loading = false;
+      const { meetingId } = action.payload;
+      state.meetings = state.meetings.filter((m) => String(m.id) !== String(meetingId));
+      delete state.participants[meetingId];
+      delete state.waitingRoom[meetingId];
+      delete state.admittedUsers[meetingId];
+      delete state.reports[meetingId];
+      if (state.currentMeeting?.id === String(meetingId)) {
+        state.currentMeeting = null;
+      }
+      saveMeetings(state.meetings);
       saveParticipants(state.participants);
     });
 

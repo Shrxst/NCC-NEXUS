@@ -327,6 +327,46 @@ const leaveMeeting = async (req, res) => {
   }
 };
 
+const deleteMeeting = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+
+    const meeting = await meetingService.deleteMeeting(
+      meetingId,
+      req.user
+    );
+
+    const io = req.app.locals.io;
+
+    if (io) {
+      io.to(`meeting_${meetingId}`).emit("meeting:deleted", {
+        meetingId,
+        deletedBy: req.user.user_id,
+      });
+    }
+
+    return res.json({
+      message: "Meeting deleted successfully",
+      meeting,
+    });
+  } catch (err) {
+    console.error("Delete Meeting Error:", err);
+
+    if (err.message === "Meeting not found") {
+      return res.status(404).json({ message: err.message });
+    }
+
+    if (err.message === "Live meetings cannot be deleted") {
+      return res.status(400).json({ message: err.message });
+    }
+
+    return res.status(500).json({
+      message: "Failed to delete meeting",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   createMeeting,
   getMeetingById,
@@ -340,4 +380,5 @@ module.exports = {
   endMeeting,
   getMeetingReport,
   leaveMeeting,
+  deleteMeeting,
 };

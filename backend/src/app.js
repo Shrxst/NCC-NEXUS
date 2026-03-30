@@ -25,6 +25,7 @@ const fineRoutes = require("./modules/fines/fine.routes");
 const meetingRoutes = require("./modules/meetings/meeting.routes");
 const communityRoutes = require("./modules/community/community.routes");
 const { startCommunityPollNotifier } = require("./modules/community/community.poll-notifier");
+const voiceRoutes = require("./routes/voice.routes");
 
 const app = express();
 const server = http.createServer(app);
@@ -94,6 +95,7 @@ app.use("/api/fines", fineRoutes);
 app.use("/api/meetings", meetingRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/community", communityRoutes);
+app.use("/api/voice", voiceRoutes);
 // 9. Global Error Handler
 // ------------------------------------------
 app.use((err, req, res, next) => {

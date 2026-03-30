@@ -741,6 +741,34 @@ const leaveMeeting = async (meetingId, user) => {
   return { message: "Left meeting successfully" };
 };
 
+const deleteMeeting = async (meetingId, user) => {
+  const { college_id } = user;
+
+  const meeting = await db("meetings")
+    .where({ meeting_id: meetingId, college_id })
+    .whereNull("deleted_at")
+    .first();
+
+  if (!meeting) {
+    throw new Error("Meeting not found");
+  }
+
+  if (meeting.status === "LIVE") {
+    throw new Error("Live meetings cannot be deleted");
+  }
+
+  const [deletedMeeting] = await db("meetings")
+    .where({ meeting_id: meetingId, college_id })
+    .whereNull("deleted_at")
+    .update({
+      deleted_at: db.fn.now(),
+      updated_at: db.fn.now(),
+    })
+    .returning("*");
+
+  return deletedMeeting || meeting;
+};
+
 const generateJitsiToken = async (meetingId, user) => {
   const { appId, keyId, privateKey } = getJitsiEnv();
   const { meeting, isHost } = await resolveMeetingRoomAccess(meetingId, user);
@@ -802,6 +830,7 @@ module.exports = {
   admitUser,
   rejectUser,
   leaveMeeting,
+  deleteMeeting,
   endMeeting,
   getMeetingReport,
   generateJitsiToken,
