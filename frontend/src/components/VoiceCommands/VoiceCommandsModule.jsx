@@ -5,11 +5,14 @@ import {
   Filter,
   LoaderCircle,
   Mic,
+  Pause,
+  Play,
   RotateCcw,
   Search,
   Sparkles,
   Square,
 } from "lucide-react";
+import WaveSurfer from "wavesurfer.js";
 import VoiceCommandCard from "./VoiceCommandCard";
 import { VOICE_COMMANDS, VOICE_COMMAND_TYPES } from "./voiceCommandsData";
 import commandAudio from "./assets/command-sample.mp3";
@@ -133,6 +136,30 @@ const getScoreMeta = (score) => {
   return { tone: "danger", label: "Practice required" };
 };
 
+const getConfidenceMeta = (confidence) => {
+  if (typeof confidence !== "number" || Number.isNaN(confidence)) {
+    return { tone: "neutral", glow: "none" };
+  }
+
+  if (confidence > 70) {
+    return { tone: "success", glow: "0 12px 24px rgba(16, 185, 129, 0.16)" };
+  }
+
+  if (confidence >= 40) {
+    return { tone: "warning", glow: "0 10px 20px rgba(245, 158, 11, 0.14)" };
+  }
+
+  return { tone: "danger", glow: "0 10px 20px rgba(239, 68, 68, 0.14)" };
+};
+
+const normalizeConfidence = (value) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(100, value));
+};
+
 export default function VoiceCommandsModule() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -148,12 +175,16 @@ export default function VoiceCommandsModule() {
   const [audioUrl, setAudioUrl] = useState("");
   const [recordingStartedAt, setRecordingStartedAt] = useState(null);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [isWavePlaying, setIsWavePlaying] = useState(false);
+  const [isConfidenceHovered, setIsConfidenceHovered] = useState(false);
 
   const audioRefs = useRef({});
   const activeAudioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const streamRef = useRef(null);
+  const waveformContainerRef = useRef(null);
+  const waveSurferRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(LEARNED_STORAGE_KEY, JSON.stringify(learned));
@@ -173,6 +204,11 @@ export default function VoiceCommandsModule() {
 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      if (waveSurferRef.current) {
+        waveSurferRef.current.destroy();
+        waveSurferRef.current = null;
       }
     };
   }, []);
@@ -196,6 +232,50 @@ export default function VoiceCommandsModule() {
       }
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (waveSurferRef.current) {
+      waveSurferRef.current.destroy();
+      waveSurferRef.current = null;
+    }
+
+    setIsWavePlaying(false);
+
+    if (!audioBlob || !waveformContainerRef.current) {
+      return undefined;
+    }
+
+    const waveSurfer = WaveSurfer.create({
+      container: waveformContainerRef.current,
+      waveColor: "#cfd6f6",
+      progressColor: "#5c6bc0",
+      cursorColor: "#1a237e",
+      barWidth: 3,
+      barGap: 2,
+      barRadius: 6,
+      height: 72,
+      normalize: true,
+    });
+
+    waveSurferRef.current = waveSurfer;
+
+    waveSurfer.on("play", () => setIsWavePlaying(true));
+    waveSurfer.on("pause", () => setIsWavePlaying(false));
+    waveSurfer.on("finish", () => setIsWavePlaying(false));
+
+    if (typeof waveSurfer.loadBlob === "function") {
+      waveSurfer.loadBlob(audioBlob);
+    } else {
+      waveSurfer.load(audioUrl);
+    }
+
+    return () => {
+      waveSurfer.destroy();
+      if (waveSurferRef.current === waveSurfer) {
+        waveSurferRef.current = null;
+      }
+    };
+  }, [audioBlob, audioUrl]);
 
   const filteredCommands = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -223,6 +303,8 @@ export default function VoiceCommandsModule() {
 
   const scoreMeta = useMemo(() => getScoreMeta(result?.score), [result]);
   const scoreValue = typeof result?.score === "number" ? Math.max(0, Math.min(100, result.score)) : 0;
+  const confidenceValue = normalizeConfidence(result?.ai_confidence);
+  const confidenceMeta = useMemo(() => getConfidenceMeta(confidenceValue), [confidenceValue]);
 
   const registerAudioRef = (id, node) => {
     if (!node) {
@@ -278,6 +360,12 @@ export default function VoiceCommandsModule() {
       URL.revokeObjectURL(audioUrl);
     }
 
+    if (waveSurferRef.current) {
+      waveSurferRef.current.destroy();
+      waveSurferRef.current = null;
+    }
+
+    setIsWavePlaying(false);
     setAudioBlob(null);
     setAudioUrl("");
     setResult(null);
@@ -436,6 +524,29 @@ export default function VoiceCommandsModule() {
     setRecordingElapsed(0);
   };
 
+  const handleWaveToggle = () => {
+    if (!waveSurferRef.current) return;
+    waveSurferRef.current.playPause();
+  };
+
+  const confidenceBarColor =
+    confidenceMeta.tone === "success"
+      ? "linear-gradient(135deg, #10b981, #047857)"
+      : confidenceMeta.tone === "warning"
+        ? "linear-gradient(135deg, #f97316, #ea580c)"
+        : confidenceMeta.tone === "danger"
+          ? "linear-gradient(135deg, #ef4444, #b91c1c)"
+          : "linear-gradient(135deg, #94a3b8, #64748b)";
+
+  const confidenceBadgeStyles =
+    confidenceMeta.tone === "success"
+      ? { color: "#0f766e", background: "rgba(16, 185, 129, 0.14)" }
+      : confidenceMeta.tone === "warning"
+        ? { color: "#c2410c", background: "rgba(249, 115, 22, 0.16)" }
+        : confidenceMeta.tone === "danger"
+          ? { color: "#b91c1c", background: "rgba(239, 68, 68, 0.14)" }
+          : { color: "#40508f", background: "rgba(92, 107, 192, 0.1)" };
+
   return (
     <div className="voice-module-shell">
       <header className="voice-module-header">
@@ -551,12 +662,167 @@ export default function VoiceCommandsModule() {
         <div className="voice-analysis-content">
           <div className="voice-score-card">
             <div className="voice-score-value">{typeof result?.score === "number" ? Math.round(result.score) : "--"}</div>
+            <div
+              style={{
+                marginTop: -6,
+                fontSize: 12,
+                fontWeight: 500,
+                color: "#5d678f",
+                lineHeight: 1.5,
+              }}
+            >
+              Based on acoustic + AI analysis
+            </div>
             <div className="voice-score-copy">
               <span className={`voice-score-pill ${scoreMeta.tone}`}>{scoreMeta.label}</span>
               <div className="voice-score-bar">
                 <div className={`voice-score-fill ${scoreMeta.tone}`} style={{ width: `${scoreValue}%` }} />
               </div>
             </div>
+
+            {isLoading ? (
+              <div
+                style={{
+                  marginTop: 6,
+                  borderRadius: 14,
+                  padding: 14,
+                  border: "1px solid rgba(92, 107, 192, 0.12)",
+                  background: "#f8f9ff",
+                }}
+              >
+                <div
+                  style={{
+                    width: "42%",
+                    height: 12,
+                    borderRadius: 999,
+                    background: "linear-gradient(90deg, rgba(92,107,192,0.08), rgba(92,107,192,0.18), rgba(92,107,192,0.08))",
+                    backgroundSize: "200% 100%",
+                    animation: "voiceShimmer 1.2s ease-in-out infinite",
+                    marginBottom: 10,
+                  }}
+                />
+                <div
+                  style={{
+                    width: "100%",
+                    height: 8,
+                    borderRadius: 999,
+                    background: "linear-gradient(90deg, rgba(92,107,192,0.08), rgba(92,107,192,0.18), rgba(92,107,192,0.08))",
+                    backgroundSize: "200% 100%",
+                    animation: "voiceShimmer 1.2s ease-in-out infinite",
+                    marginBottom: 10,
+                  }}
+                />
+                <div
+                  style={{
+                    width: "72%",
+                    height: 10,
+                    borderRadius: 999,
+                    background: "linear-gradient(90deg, rgba(92,107,192,0.08), rgba(92,107,192,0.18), rgba(92,107,192,0.08))",
+                    backgroundSize: "200% 100%",
+                    animation: "voiceShimmer 1.2s ease-in-out infinite",
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {confidenceValue !== null ? (
+              <div
+                title="AI evaluates voice clarity and command strength using deep learning"
+                onMouseEnter={() => setIsConfidenceHovered(true)}
+                onMouseLeave={() => setIsConfidenceHovered(false)}
+                style={{
+                  marginTop: 6,
+                  borderRadius: 14,
+                  padding: 14,
+                  border: "1px solid rgba(92, 107, 192, 0.12)",
+                  background: "#f8f9ff",
+                  boxShadow: confidenceMeta.glow,
+                  transform: isConfidenceHovered ? "translateY(-2px)" : "translateY(0)",
+                  transition: "box-shadow 0.35s ease, transform 0.35s ease, border-color 0.35s ease",
+                  borderColor:
+                    confidenceMeta.tone === "success"
+                      ? "rgba(16, 185, 129, 0.2)"
+                      : confidenceMeta.tone === "warning"
+                        ? "rgba(249, 115, 22, 0.2)"
+                        : confidenceMeta.tone === "danger"
+                          ? "rgba(239, 68, 68, 0.18)"
+                          : "rgba(92, 107, 192, 0.12)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 10,
+                    marginBottom: 10,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#24315c", marginBottom: 4 }}>
+                      AI Confidence
+                    </div>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "#40508f",
+                        background: "rgba(92, 107, 192, 0.08)",
+                        borderRadius: 999,
+                        padding: "4px 8px",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span aria-hidden="true">🧠</span>
+                      AI Analysis Enabled
+                    </div>
+                    <div style={{ fontSize: 11, lineHeight: 1.5, color: "#5d678f" }}>
+                      AI evaluates voice clarity and command strength
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      padding: "5px 9px",
+                      ...confidenceBadgeStyles,
+                    }}
+                  >
+                    {Math.round(confidenceValue)}%
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    height: 8,
+                    borderRadius: 999,
+                    background: "rgba(92, 107, 192, 0.12)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${confidenceValue}%`,
+                      height: "100%",
+                      borderRadius: "inherit",
+                      background: confidenceBarColor,
+                      transition: "width 0.6s ease, box-shadow 0.35s ease",
+                      boxShadow:
+                        confidenceMeta.tone === "success"
+                          ? "0 0 12px rgba(16, 185, 129, 0.28)"
+                          : confidenceMeta.tone === "warning"
+                            ? "0 0 10px rgba(249, 115, 22, 0.18)"
+                            : "none",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="voice-metrics-grid">
@@ -596,6 +862,43 @@ export default function VoiceCommandsModule() {
           {audioUrl ? (
             <div className="voice-playback-card">
               <h4>Your recording</h4>
+
+              <div
+                ref={waveformContainerRef}
+                style={{
+                  width: "100%",
+                  minHeight: 88,
+                  borderRadius: 12,
+                  background: "#ffffff",
+                  border: "1px solid rgba(92, 107, 192, 0.14)",
+                  padding: "8px 10px",
+                  marginBottom: 12,
+                }}
+              />
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <button
+                  type="button"
+                  onClick={handleWaveToggle}
+                  style={{
+                    border: "1px solid rgba(92, 107, 192, 0.18)",
+                    background: "#eff2ff",
+                    color: "#30416f",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {isWavePlaying ? <Pause size={14} /> : <Play size={14} />}
+                  {isWavePlaying ? "Pause" : "Play"}
+                </button>
+              </div>
+
               <audio controls src={audioUrl} className="voice-playback-audio">
                 Your browser does not support audio playback.
               </audio>
