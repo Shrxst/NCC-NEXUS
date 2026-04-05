@@ -40,6 +40,7 @@ import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
 import VoiceCommandsModule from "../VoiceCommands/VoiceCommandsModule";
 import CommunityFeed from "../community/CommunityFeed";
+import CertificateModule from "../Certificate/CertificateModule";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
 import { resolveProfileImage } from "../../utils/profileImage";
@@ -58,7 +59,7 @@ const normalizeRankLabel = (value, fallback) => {
 
 export default function SUODashboard() {
   const SUO_TAB_STORAGE_KEY = "suo_dashboard_active_tab";
-  const SUO_ALLOWED_TABS = ["profile", "feed", "chatbot", "attendance", "meetings", "quiz", "voice", "chat", "community"];
+  const SUO_ALLOWED_TABS = ["profile", "feed", "chatbot", "attendance", "meetings", "quiz", "voice", "chat", "community", "certificates"];
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -401,6 +402,16 @@ export default function SUODashboard() {
                 </button>
 
                 <button
+                  className={`nav-item ${activeTab === "certificates" ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveTab("certificates");
+                    dispatch(closeSUOSidebar());
+                  }}
+                >
+                  <KeyRound size={18} />
+                  <span>Certificates</span>
+                </button>
+                <button
                   className="nav-item"
                   onClick={() => {
                     setShowReset(true);
@@ -517,6 +528,8 @@ export default function SUODashboard() {
             )}
 
             {activeTab === "community" && <CommunityFeed />}
+
+            {activeTab === "certificates" && <CertificateModule storageKey="suo_certificates" />}
 
             {activeTab === "profile" && (
               <div className="profile-page">

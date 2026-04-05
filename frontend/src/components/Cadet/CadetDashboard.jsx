@@ -38,6 +38,7 @@ import { API_BASE_URL } from "../../api/config";
 import QuizModule from "../quiz/QuizModule";
 import VoiceCommandsModule from "../VoiceCommands/VoiceCommandsModule";
 import CommunityFeed from "../community/CommunityFeed";
+import CertificateModule from "../Certificate/CertificateModule";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
 import { resolveProfileImage } from "../../utils/profileImage";
@@ -56,7 +57,7 @@ const normalizeRankLabel = (value, fallback) => {
 
 export default function CadetDashboard() {
   const CADET_TAB_STORAGE_KEY = "cadet_dashboard_active_tab";
-  const CADET_ALLOWED_TABS = ["profile", "feed", "attendance", "meetings", "quiz", "voice", "chatbot", "chat", "community"];
+  const CADET_ALLOWED_TABS = ["profile", "feed", "attendance", "meetings", "quiz", "voice", "chatbot", "chat", "community", "certificates"];
 
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -411,7 +412,10 @@ const [isEditingBio, setIsEditingBio] = useState(false);
                 <span>Community</span>
               </button>
 
-              <button className="nav-item" onClick={() => setSidebarOpen(false)}>
+              <button
+                className={`nav-item ${activeTab === "certificates" ? "active" : ""}`}
+                onClick={() => { setActiveTab("certificates"); setSidebarOpen(false); }}
+              >
                 <Shield size={18} />
                 <span>Certificates</span>
               </button>
@@ -536,6 +540,10 @@ const [isEditingBio, setIsEditingBio] = useState(false);
           )}
 
           {activeTab === "voice" && <VoiceCommandsModule />}
+
+          {activeTab === "certificates" && (
+            <CertificateModule storageKey="cadet_certificates" />
+          )}
 
           {activeTab === "profile" && (
             <div className="profile-page">
