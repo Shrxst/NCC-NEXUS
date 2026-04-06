@@ -18,6 +18,7 @@ import {
   CalendarDays,
   Video,
   ClipboardCheck,
+  Bell,
 } from "lucide-react";
 import ChatLayout from "../ChatCommon/ChatLayout";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +40,8 @@ import QuizModule from "../quiz/QuizModule";
 import VoiceCommandsModule from "../VoiceCommands/VoiceCommandsModule";
 import CommunityFeed from "../community/CommunityFeed";
 import CertificateModule from "../Certificate/CertificateModule";
+import NotificationPanel from "../Notifications/NotificationPanel";
+import { connectNotificationSocket, getNotificationSocket } from "../../features/notifications/notificationSocket";
 import { clearAuthStorage, hasAuthFor } from "../../utils/authState";
 import { getStoredDashboardTab, persistDashboardTab } from "../../utils/dashboardState";
 import { resolveProfileImage } from "../../utils/profileImage";
@@ -67,6 +70,10 @@ export default function CadetDashboard() {
   );
   const [showReset, setShowReset] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const notifRef = useRef(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   const defaultProfileImage = "";
@@ -259,6 +266,63 @@ const [isEditingBio, setIsEditingBio] = useState(false);
   const cancelEditBio = () => {
     setIsEditingBio(false);
     setTempBio("");
+  };
+
+  // ── Notification fetch + socket ──
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    let mounted = true;
+
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/notifications`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok || !mounted) return;
+        const list = Array.isArray(data) ? data : [];
+        setNotifications(list);
+        setUnreadCount(list.filter((n) => !n.is_read).length);
+      } catch (err) {
+        console.error("Notification fetch error:", err);
+      }
+    };
+
+    fetchNotifications();
+
+    const socket = connectNotificationSocket(token) || getNotificationSocket();
+    if (!socket) return () => { mounted = false; };
+
+    const handleNew = (notification) => {
+      if (!mounted || !notification) return;
+      setNotifications((prev) => [notification, ...prev.filter((n) => n.notification_id !== notification.notification_id)]);
+      setUnreadCount((prev) => prev + (notification.is_read ? 0 : 1));
+    };
+
+    socket.on("notification:new", handleNew);
+
+    return () => {
+      mounted = false;
+      socket.off("notification:new", handleNew);
+    };
+  }, []);
+
+  // Close notification dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const markAllReadLocal = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
   };
 
   useEffect(() => {
@@ -454,6 +518,30 @@ const [isEditingBio, setIsEditingBio] = useState(false);
             >
               Menu
             </button>
+
+            <div className="topbar-notif-wrapper" ref={notifRef}>
+              <button
+                type="button"
+                className="topbar-notif-btn"
+                aria-label="Notifications"
+                onClick={() => {
+                  setNotifOpen((prev) => !prev);
+                  if (!notifOpen) markAllReadLocal();
+                }}
+              >
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span className="topbar-notif-badge">{unreadCount}</span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="topbar-notif-dropdown">
+                  <NotificationPanel />
+                </div>
+              )}
+            </div>
+
             <button
               className="topbar-logout"
               onClick={() => {

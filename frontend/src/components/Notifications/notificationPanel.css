@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════════════
-   Notification Panel — Embedded Profile Section
+   Notification Panel — Dashboard Dropdown
    ═══════════════════════════════════════════════ */
 
 .notif-panel {
-  background: var(--d-surface, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--d-border, rgba(255, 255, 255, 0.08));
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 18px;
   padding: 0;
   margin-bottom: 28px;
@@ -26,7 +26,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px 14px;
-  border-bottom: 1px solid var(--d-border, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: #fafbff;
 }
 
 .notif-panel-title {
@@ -36,7 +37,7 @@
 }
 
 .notif-panel-title svg {
-  color: var(--d-accent, #5c6bc0);
+  color: #5c6bc0;
   opacity: 0.85;
 }
 
@@ -46,7 +47,7 @@
   font-size: 1.05rem;
   font-weight: 400;
   letter-spacing: 0.02em;
-  color: var(--d-text, #e0e0e0);
+  color: #1a1d2e;
 }
 
 .notif-unread-badge {
@@ -72,10 +73,10 @@
   align-items: center;
   gap: 5px;
   padding: 6px 14px;
-  border: 1px solid var(--d-border, rgba(255, 255, 255, 0.1));
+  border: 1px solid rgba(92, 107, 192, 0.2);
   border-radius: 8px;
   background: transparent;
-  color: var(--d-accent, #5c6bc0);
+  color: #5c6bc0;
   font-family: "Poppins", sans-serif;
   font-size: 0.72rem;
   font-weight: 500;
@@ -84,9 +85,9 @@
 }
 
 .notif-mark-read:hover {
-  background: var(--d-accent, #5c6bc0);
+  background: #5c6bc0;
   color: #fff;
-  border-color: var(--d-accent, #5c6bc0);
+  border-color: #5c6bc0;
 }
 
 /* ── List ── */
@@ -116,7 +117,7 @@
   align-items: flex-start;
   gap: 12px;
   padding: 14px 24px;
-  border-bottom: 1px solid var(--d-border, rgba(255, 255, 255, 0.04));
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   transition: background 0.2s ease;
   cursor: default;
 }
@@ -144,7 +145,7 @@
   min-width: 8px;
   border-radius: 50%;
   margin-top: 6px;
-  background: var(--d-border, rgba(255, 255, 255, 0.12));
+  background: #d0d4e0;
   transition: background 0.2s ease;
 }
 
@@ -165,21 +166,21 @@
   font-family: "Poppins", sans-serif;
   font-size: 0.82rem;
   font-weight: 400;
-  color: var(--d-text, #e0e0e0);
+  color: #3d4260;
   line-height: 1.5;
   word-break: break-word;
 }
 
 .notif-item-unread .notif-message {
   font-weight: 500;
-  color: var(--d-heading, #fff);
+  color: #1a1d2e;
 }
 
 .notif-time {
   font-family: "Manrope", sans-serif;
   font-size: 0.68rem;
   font-weight: 500;
-  color: var(--d-text-muted, rgba(255, 255, 255, 0.4));
+  color: #8b90a8;
   letter-spacing: 0.02em;
 }
 
@@ -189,7 +190,7 @@
   text-align: center;
   font-family: "Poppins", sans-serif;
   font-size: 0.85rem;
-  color: var(--d-text-muted, rgba(255, 255, 255, 0.4));
+  color: #8b90a8;
 }
 
 /* ── Animations ── */
