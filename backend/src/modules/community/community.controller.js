@@ -91,6 +91,14 @@ const createPost = async (req, res) => {
   try {
     const payload = await buildPayload(req);
     const post = await communityService.createPost(payload, req.user);
+    const io = req.app.get("io") || req.app.locals.io;
+
+    if (io && req.user?.college_id) {
+      io.to(`college_${req.user.college_id}`).emit("new_post", {
+        postId: post?.community_post_id || post?.post_id || null,
+        data: post,
+      });
+    }
 
     return res.status(201).json({
       message: "Post created successfully",
@@ -155,6 +163,14 @@ const approvePost = async (req, res) => {
     const postId = req.params.postId;
 
     const result = await communityService.approvePost(postId, req.user);
+    const io = req.app.get("io") || req.app.locals.io;
+
+    if (io && req.user?.college_id) {
+      io.to(`college_${req.user.college_id}`).emit("post_approved", {
+        postId,
+        data: result,
+      });
+    }
 
     return res.json({
       message: "Post approved successfully",
@@ -240,6 +256,15 @@ if (!reaction_type) {
       req.user
     );
 
+    const io = req.app.get("io") || req.app.locals.io;
+    if (io && req.user?.college_id) {
+      io.to(`college_${req.user.college_id}`).emit("post_reacted", {
+        postId: req.params.postId,
+        reaction_type,
+        data: result,
+      });
+    }
+
     res.json(result);
 
   } catch (err) {
@@ -293,6 +318,14 @@ const addComment = async (req, res) => {
       parent_comment_id,
       req.user
     );
+
+    const io = req.app.get("io") || req.app.locals.io;
+    if (io && req.user?.college_id) {
+      io.to(`college_${req.user.college_id}`).emit("new_comment", {
+        postId: req.params.postId,
+        data: comment,
+      });
+    }
 
     res.status(201).json({
       message: "Comment added",
@@ -377,6 +410,14 @@ const deletePost = async (req, res) => {
       req.params.postId,
       req.user
     );
+
+    const io = req.app.get("io") || req.app.locals.io;
+    if (io && req.user?.college_id) {
+      io.to(`college_${req.user.college_id}`).emit("post_deleted", {
+        postId: req.params.postId,
+        data: result,
+      });
+    }
 
     res.json(result);
 
