@@ -91,14 +91,15 @@ function FeedReactButton({ liked, likeCount, onToggleLike, chosenEmoji, onPickEm
 
   const handleClick = React.useCallback(() => {
     if (didLongPress.current) return;
-    onToggleLike();
-    if (!liked) onPickEmoji("\u{1F44D}");
+    const defaultEmoji = "\u{1F44D}";
+    onToggleLike(!liked ? defaultEmoji : null);
+    if (!liked) onPickEmoji(defaultEmoji);
   }, [onToggleLike, liked, onPickEmoji]);
 
   const pickReaction = React.useCallback((emoji) => {
     setPickerOpen(false);
     onPickEmoji(emoji);
-    if (!liked) onToggleLike();
+    onToggleLike(emoji);
   }, [liked, onToggleLike, onPickEmoji]);
 
   const handleContextMenu = React.useCallback((e) => {
@@ -350,7 +351,8 @@ export default function Feed({
     video: post.video || (post.post_type === "video" ? post.media_url : null),
     likes: Number(post.likes ?? post.likes_count ?? 0),
     likes_count: Number(post.likes_count ?? post.likes ?? 0),
-    liked: Boolean(post.liked),
+    liked: Boolean(post.liked_by_me ?? post.liked),
+    reactionEmoji: post.reaction_emoji_by_me ?? post.reaction_emoji ?? null,
     comments: Array.isArray(post.comments) ? post.comments : [],
     comments_count: Number(
       post.comments_count ?? (Array.isArray(post.comments) ? post.comments.length : 0)
@@ -627,7 +629,7 @@ export default function Feed({
   };
 
   /* ================= LIKE POST ================= */
-  const toggleLike = async (id) => {
+  const toggleLike = async (id, reactionEmoji = null) => {
     const token = localStorage.getItem("token");
     if (!token) {
       alert("Session expired. Please login again.");
@@ -639,25 +641,43 @@ export default function Feed({
 
     const wasLiked = Boolean(currentPost.liked);
     const previousLikes = Number(currentPost.likes ?? currentPost.likes_count ?? 0);
+    const previousReactionEmoji = currentPost.reactionEmoji ?? null;
+    const isReactionUpdate = wasLiked && Boolean(reactionEmoji);
 
     setPosts((prev) =>
       prev.map((p) =>
         Number(p.id) === Number(id)
           ? {
               ...p,
-              liked: !p.liked,
-              likes: p.liked ? Math.max((p.likes || 0) - 1, 0) : (p.likes || 0) + 1,
+              liked: isReactionUpdate ? p.liked : !p.liked,
+              likes: isReactionUpdate
+                ? (p.likes || 0)
+                : p.liked
+                ? Math.max((p.likes || 0) - 1, 0)
+                : (p.likes || 0) + 1,
+              likes_count: isReactionUpdate
+                ? (p.likes_count || p.likes || 0)
+                : p.liked
+                ? Math.max((p.likes_count || p.likes || 0) - 1, 0)
+                : (p.likes_count || p.likes || 0) + 1,
+              reactionEmoji: reactionEmoji || (isReactionUpdate ? p.reactionEmoji : p.liked ? null : "👍"),
             }
           : p
       )
     );
 
+    if (reactionEmoji) {
+      setChosenEmojis((prev) => ({ ...prev, [id]: reactionEmoji }));
+    }
+
     try {
       const response = await fetch(`${FEED_API_URL}/${id}/like`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify(reactionEmoji ? { reaction_emoji: reactionEmoji } : {}),
       });
 
       const data = await response.json();
@@ -665,8 +685,17 @@ export default function Feed({
         throw new Error(data.message || "Unable to update like");
       }
 
-      const isLikedNow = data.message === "Liked" ? true : data.message === "Unliked" ? false : !wasLiked;
+      const isLikedNow =
+        data.message === "Liked"
+          ? true
+          : data.message === "Unliked"
+          ? false
+          : data.message === "Reaction updated"
+          ? true
+          : !wasLiked;
       const nextLikes = Number(data.likes_count ?? previousLikes + (isLikedNow ? 1 : -1));
+      const nextReactionEmoji =
+        data.reaction_emoji ?? (isLikedNow ? reactionEmoji || previousReactionEmoji || "👍" : null);
 
       setPosts((prev) =>
         prev.map((p) =>
@@ -676,10 +705,18 @@ export default function Feed({
                 liked: isLikedNow,
                 likes: Math.max(nextLikes, 0),
                 likes_count: Math.max(nextLikes, 0),
+                reactionEmoji: nextReactionEmoji,
               }
             : p
         )
       );
+
+      setChosenEmojis((prev) => {
+        const next = { ...prev };
+        if (nextReactionEmoji) next[id] = nextReactionEmoji;
+        else delete next[id];
+        return next;
+      });
     } catch (error) {
       console.error("Toggle Like Error:", error);
       setPosts((prev) =>
@@ -690,10 +727,17 @@ export default function Feed({
                 liked: wasLiked,
                 likes: previousLikes,
                 likes_count: previousLikes,
+                reactionEmoji: previousReactionEmoji,
               }
             : p
         )
       );
+      setChosenEmojis((prev) => {
+        const next = { ...prev };
+        if (previousReactionEmoji) next[id] = previousReactionEmoji;
+        else delete next[id];
+        return next;
+      });
       alert("Failed to update like.");
     }
   };
@@ -1347,7 +1391,7 @@ export default function Feed({
                 >
                   <span className="feed-reaction-icons">
                     {REACTION_EMOJIS
-                      .filter((_, i) => i === 0 || (chosenEmojis[p.id] && chosenEmojis[p.id] === REACTION_EMOJIS[i]?.icon))
+                      .filter((_, i) => i === 0 || ((chosenEmojis[p.id] ?? p.reactionEmoji) && (chosenEmojis[p.id] ?? p.reactionEmoji) === REACTION_EMOJIS[i]?.icon))
                       .slice(0, 3)
                       .map((item, i) => (
                         <span key={item.key} className="feed-reaction-icon-circle" style={{ zIndex: 3 - i }}>{item.icon}</span>
@@ -1368,8 +1412,8 @@ export default function Feed({
               <FeedReactButton
                 liked={p.liked}
                 likeCount={getPostLikeCount(p)}
-                onToggleLike={() => toggleLike(p.id)}
-                chosenEmoji={chosenEmojis[p.id]}
+                onToggleLike={(emoji) => toggleLike(p.id, emoji)}
+                chosenEmoji={chosenEmojis[p.id] ?? p.reactionEmoji}
                 onPickEmoji={(emoji) => setChosenEmojis((prev) => ({ ...prev, [p.id]: emoji }))}
               />
 

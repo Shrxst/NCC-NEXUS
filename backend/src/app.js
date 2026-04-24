@@ -39,7 +39,18 @@ const io = new Server(server, {
 
 // Make io globally accessible
 app.locals.io = io;
+app.set("io", io);
 app.locals.onlineUsers = new Set();
+
+io.on("connection", (socket) => {
+  console.log(`[socket] connected ${socket.id}`);
+
+  socket.on("join_college", (college_id) => {
+    const normalizedCollegeId = Number(college_id);
+    if (!Number.isInteger(normalizedCollegeId) || normalizedCollegeId <= 0) return;
+    socket.join(`college_${normalizedCollegeId}`);
+  });
+});
 
 // Initialize chat socket
 // Initialize sockets

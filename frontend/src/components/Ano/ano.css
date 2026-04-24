@@ -373,6 +373,94 @@
   transform: translateY(-2px);
 }
 
+/* ── Topbar Notification Bell ── */
+.ano-dashboard-layout .topbar-notif-wrapper {
+  position: relative;
+  margin-left: 12px;
+  margin-right: auto;
+}
+
+.ano-dashboard-layout .topbar-notif-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--a-border, rgba(0, 0, 0, 0.06));
+  border-radius: 10px;
+  background: rgba(92, 107, 192, 0.06);
+  color: var(--a-primary, #5C6BC0);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ano-dashboard-layout .topbar-notif-btn:hover {
+  background: rgba(92, 107, 192, 0.14);
+  border-color: rgba(92, 107, 192, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(92, 107, 192, 0.15);
+}
+
+.ano-dashboard-layout .topbar-notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, #ef5350, #e53935);
+  color: #fff;
+  font-family: var(--a-font-tech, "Manrope", sans-serif);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(229, 57, 53, 0.35);
+  animation: anoBadgeBounce 0.3s ease both;
+}
+
+@keyframes anoBadgeBounce {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.ano-dashboard-layout .topbar-notif-dropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 10px);
+  width: 360px;
+  max-height: 440px;
+  z-index: 200;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  animation: anoNotifSlide 0.2s ease both;
+}
+
+.ano-dashboard-layout .topbar-notif-dropdown .notif-panel {
+  margin-bottom: 0;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
+@keyframes anoNotifSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 480px) {
+  .ano-dashboard-layout .topbar-notif-dropdown {
+    width: calc(100vw - 32px);
+    right: -60px;
+  }
+}
+
 .ano-sidebar-backdrop {
   display: none;
   position: fixed;
@@ -411,6 +499,12 @@
 .ano-dashboard-content > .ano-tricolor-bar,
 .ano-dashboard-content > .ano-topbar {
   max-width: none;
+  z-index: 100;
+}
+
+.ano-dashboard-content > .ano-topbar .topbar-notif-wrapper,
+.ano-dashboard-content > .ano-topbar .topbar-notif-dropdown {
+  z-index: 200;
 }
 
 /* =======================================================================

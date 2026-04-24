@@ -192,9 +192,28 @@ const getFeed = async (req, res) => {
       .limit(limitNum)
       .offset((pageNum - 1) * limitNum);
 
+    const postIds = posts.map((post) => Number(post.post_id)).filter((id) => Number.isInteger(id) && id > 0);
+    let likedPostIdSet = new Set();
+
+    const likedPostEmojiMap = new Map();
+
+    if (postIds.length > 0) {
+      const likedRows = await db("post_likes")
+        .where({ regimental_no: effectiveRegimentalNo })
+        .whereIn("post_id", postIds)
+        .select("post_id", "reaction_emoji");
+
+      likedPostIdSet = new Set(likedRows.map((row) => Number(row.post_id)));
+      likedRows.forEach((row) => {
+        likedPostEmojiMap.set(Number(row.post_id), row.reaction_emoji || null);
+      });
+    }
+
     const normalized = posts.map((post) => ({
       ...post,
       content_text: post.caption,
+      liked_by_me: likedPostIdSet.has(Number(post.post_id)),
+      reaction_emoji_by_me: likedPostEmojiMap.get(Number(post.post_id)) || null,
     }));
 
     res.json(normalized);
@@ -426,7 +445,12 @@ const toggleLike = async (req, res) => {
   try {
     const regimental_no = await resolveRegimentalNo(req.user);
     const { post_id } = req.params;
+    const { reaction_emoji } = req.body || {};
     const io = req.app.locals.io;
+    const normalizedReactionEmoji =
+      typeof reaction_emoji === "string" && reaction_emoji.trim()
+        ? reaction_emoji.trim().slice(0, 16)
+        : null;
 
     if (!regimental_no) {
       return res.status(400).json({ message: "Cadet profile not linked to this account" });
@@ -435,6 +459,24 @@ const toggleLike = async (req, res) => {
     const existing = await db("post_likes").where({ post_id, regimental_no }).first();
 
     if (existing) {
+      if (normalizedReactionEmoji && normalizedReactionEmoji !== existing.reaction_emoji) {
+        await db("post_likes")
+          .where({ post_id, regimental_no })
+          .update({ reaction_emoji: normalizedReactionEmoji });
+
+        const currentPost = await db("posts")
+          .where({ post_id })
+          .select("likes_count")
+          .first();
+
+        return res.json({
+          message: "Reaction updated",
+          liked: true,
+          likes_count: Number(currentPost?.likes_count ?? 0),
+          reaction_emoji: normalizedReactionEmoji,
+        });
+      }
+
       await db("post_likes").where({ post_id, regimental_no }).del();
 
       const [updated] = await db("posts")
@@ -455,10 +497,19 @@ const toggleLike = async (req, res) => {
         });
       }
 
-      return res.json({ message: "Unliked", likes_count: updated.likes_count });
+      return res.json({
+        message: "Unliked",
+        liked: false,
+        likes_count: updated.likes_count,
+        reaction_emoji: null,
+      });
     }
 
-    await db("post_likes").insert({ post_id, regimental_no });
+    await db("post_likes").insert({
+      post_id,
+      regimental_no,
+      reaction_emoji: normalizedReactionEmoji || "👍",
+    });
 
     const [updated] = await db("posts")
       .where({ post_id })
@@ -502,7 +553,12 @@ const toggleLike = async (req, res) => {
       }
     }
 
-    res.json({ message: "Liked", likes_count: updated.likes_count });
+    res.json({
+      message: "Liked",
+      liked: true,
+      likes_count: updated.likes_count,
+      reaction_emoji: normalizedReactionEmoji || "👍",
+    });
   } catch (err) {
     console.error("Toggle Like Error:", err);
     res.status(500).json({ message: "Server Error" });
