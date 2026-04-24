@@ -10,6 +10,7 @@ import { COMMUNITY_TAGS } from "../../data/communityData";
 import { getStoredRole } from "../../utils/authState";
 import { communityApi } from "../../api/communityApi";
 import { donationApi } from "../../api/donationApi";
+import { connectSocket, getSocket } from "../../features/ui/socket";
 import nccLogo from "../assets/ncc-logo.png";
 import LeaderboardSection from "../Donations/LeaderboardSection";
 import "./community.css";
@@ -213,6 +214,14 @@ export default function CommunityFeed() {
     }
   }, []);
 
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+
   const refreshFeed = async () => {
     try {
       setLoadingFeed(true);
@@ -244,6 +253,80 @@ export default function CommunityFeed() {
   useEffect(() => {
     refreshFeed();
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const socket = getSocket() || connectSocket(token);
+
+    if (!socket) return undefined;
+
+    if (currentUser?.college_id) {
+      socket.emit("join_college", currentUser.college_id);
+    }
+
+    const mergeRealtimePost = (incomingPost) => {
+      if (!incomingPost?.community_post_id) return;
+
+      const mappedPost = mapBackendPostToUi(incomingPost, []);
+
+      setPosts((prev) => {
+        const existingIndex = prev.findIndex((post) => String(post.id) === String(mappedPost.id));
+
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            ...mappedPost,
+            comments: next[existingIndex].comments || mappedPost.comments || [],
+          };
+          return next;
+        }
+
+        return [mappedPost, ...prev];
+      });
+    };
+
+    const handleNewPost = ({ data } = {}) => {
+      mergeRealtimePost(data);
+    };
+
+    const handlePostApproved = ({ data } = {}) => {
+      mergeRealtimePost(data);
+    };
+
+    const handlePostDeleted = ({ postId } = {}) => {
+      if (!postId) return;
+      setPosts((prev) => prev.filter((post) => String(post.id) !== String(postId)));
+      setUserReactions((prev) => {
+        if (!prev[String(postId)]) return prev;
+        const next = { ...prev };
+        delete next[String(postId)];
+        return next;
+      });
+    };
+
+    const handlePostReacted = () => {
+      refreshFeed();
+    };
+
+    const handleNewComment = () => {
+      refreshFeed();
+    };
+
+    socket.on("new_post", handleNewPost);
+    socket.on("post_approved", handlePostApproved);
+    socket.on("post_deleted", handlePostDeleted);
+    socket.on("post_reacted", handlePostReacted);
+    socket.on("new_comment", handleNewComment);
+
+    return () => {
+      socket.off("new_post", handleNewPost);
+      socket.off("post_approved", handlePostApproved);
+      socket.off("post_deleted", handlePostDeleted);
+      socket.off("post_reacted", handlePostReacted);
+      socket.off("new_comment", handleNewComment);
+    };
+  }, [currentUser?.college_id]);
 
   useEffect(() => {
     if (communityTab !== "leaderboard") return;

@@ -11,6 +11,7 @@ import {
   setCurrentMeeting,
   fetchMeetingById,
   fetchParticipants,
+  fetchWaitingList,
 } from "../../store/meetingSlice";
 import { meetingApi } from "../../api/meetingApi";
 
@@ -308,14 +309,35 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings", meetingIdPr
   useEffect(() => {
     if (!meetingId) return;
 
+    if (authority && canManage) {
+      dispatch(fetchWaitingList(meetingId));
+    }
+
     joinMeetingRoom(meetingId);
 
     bindMeetingSocketEvents({
-      onUserAdmitted: () => {
-        dispatch(fetchParticipants(meetingId));
+      onWaitingRequest: (payload = {}) => {
+        if (!authority || !canManage) return;
+        if (String(payload.meetingId) !== String(meetingId)) return;
+        dispatch(fetchWaitingList(meetingId));
       },
 
-      onUserLeft: () => {
+      onUserAdmitted: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
+        dispatch(fetchParticipants(meetingId));
+        if (authority && canManage) {
+          dispatch(fetchWaitingList(meetingId));
+        }
+      },
+
+      onUserRejected: (payload = {}) => {
+        if (!authority || !canManage) return;
+        if (String(payload.meetingId) !== String(meetingId)) return;
+        dispatch(fetchWaitingList(meetingId));
+      },
+
+      onUserLeft: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
         dispatch(fetchParticipants(meetingId));
       },
 
@@ -335,11 +357,13 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings", meetingIdPr
         });
       },
 
-      onMeetingStarted: () => {
+      onMeetingStarted: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
         dispatch(fetchMeetingById(meetingId));
       },
 
-      onMeetingEnded: () => {
+      onMeetingEnded: (payload = {}) => {
+        if (String(payload.meetingId) !== String(meetingId)) return;
         if (onBack) { onBack(); } else { navigate(basePath); }
       },
     });
@@ -347,7 +371,7 @@ const MeetingRoomPage = ({ embedded = false, basePath = "/meetings", meetingIdPr
     return () => {
       leaveMeetingRoom(meetingId);
     };
-  }, [basePath, dispatch, meetingId, navigate]);
+  }, [authority, basePath, canManage, dispatch, meetingId, navigate]);
 
   const hostGraceSeconds =
     hostDisconnectedState.active && hostDisconnectedState.deadlineAt

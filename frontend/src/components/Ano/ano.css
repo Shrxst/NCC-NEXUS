@@ -499,6 +499,12 @@
 .ano-dashboard-content > .ano-tricolor-bar,
 .ano-dashboard-content > .ano-topbar {
   max-width: none;
+  z-index: 100;
+}
+
+.ano-dashboard-content > .ano-topbar .topbar-notif-wrapper,
+.ano-dashboard-content > .ano-topbar .topbar-notif-dropdown {
+  z-index: 200;
 }
 
 /* =======================================================================

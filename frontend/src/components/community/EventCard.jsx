@@ -2,14 +2,14 @@ import React from "react";
 import { CalendarDays, Clock3, MapPin } from "lucide-react";
 import { FaArrowUpRightFromSquare } from "react-icons/fa6";
 
-function formatRelativeDay(value) {
+function getEventStatus(value) {
   const eventDate = new Date(value).getTime();
   const diff = eventDate - Date.now();
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days > 1) return `In ${days} days`;
-  return "Completed";
+  if (days === 0) return { label: "Today", tone: "today" };
+  if (days === 1) return { label: "Tomorrow", tone: "upcoming" };
+  if (days > 1) return { label: `In ${days} days`, tone: "upcoming" };
+  return { label: "Completed", tone: "completed" };
 }
 
 function toCalendarLink(eventDetails) {
@@ -29,13 +29,20 @@ function toCalendarLink(eventDetails) {
 
 export default function EventCard({ eventDetails }) {
   if (!eventDetails) return null;
+  const status = getEventStatus(eventDetails.date);
+
   return (
     <div className="community-event-card">
       <div className="community-event-head">
-        <h4>{eventDetails.title}</h4>
-        <span className="community-inline-chip">
+        <div className="community-event-title-block">
+          <h4>{eventDetails.title}</h4>
+          {eventDetails.eventTag ? (
+            <span className="community-event-tag">{eventDetails.eventTag}</span>
+          ) : null}
+        </div>
+        <span className={`community-inline-chip community-event-status ${status.tone}`}>
           <Clock3 size={13} />
-          Starts {formatRelativeDay(eventDetails.date).toLowerCase()}
+          {status.label}
         </span>
       </div>
       <div className="community-event-meta-line">
