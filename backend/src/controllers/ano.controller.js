@@ -1,7 +1,7 @@
 const db = require("../db/knex");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
-const { sendMail } = require("../services/mail.service");
+const { sendMail } = require("../utils/mailer");
 
 // Helper to get ANO's college ID securely
 const getAnoContext = async (userId) => {
