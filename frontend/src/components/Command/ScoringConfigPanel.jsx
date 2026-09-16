@@ -97,8 +97,17 @@ export default function ScoringConfigPanel() {
   }, [view, edited]);
 
   const setWeight = (pillar, value) => {
-    const num = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-    setEdited((prev) => ({ ...prev, [pillar]: num }));
+    setEdited((prev) => {
+      // A pillar can only take what is left of the 100% budget, so the
+      // combined total can never exceed 100.
+      const othersTotal = Object.entries(prev).reduce(
+        (a, [k, v]) => (k === pillar ? a : a + (Number(v) || 0)),
+        0
+      );
+      const budget = Math.max(0, 100 - othersTotal);
+      const num = Math.max(0, Math.min(budget, Math.round(Number(value) || 0)));
+      return { ...prev, [pillar]: num };
+    });
   };
 
   const resetToActive = () => setEdited(toPercents(view?.resolved?.weights || {}));
@@ -269,9 +278,18 @@ export default function ScoringConfigPanel() {
                       </span>
                     </div>
                     <p className="scp-hist-weights">
-                      {Object.entries(h.weights || {})
-                        .map(([k, v]) => `${(PILLAR_LABELS[k] || k).slice(0, 4)} ${Math.round(v * 100)}%`)
-                        .join(" · ")}
+                      {(() => {
+                        // Stored rows may hold fractions (~1) or percents (~100).
+                        const entries = Object.entries(h.weights || {});
+                        const sum = entries.reduce((a, [, v]) => a + (Number(v) || 0), 0);
+                        const scale = sum > 1.5 ? 1 : 100;
+                        return entries
+                          .map(
+                            ([k, v]) =>
+                              `${(PILLAR_LABELS[k] || k).slice(0, 4)} ${Math.round(v * scale)}%`
+                          )
+                          .join(" · ");
+                      })()}
                     </p>
                   </li>
                 ))}
