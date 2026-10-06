@@ -39,12 +39,12 @@ export default function DigitalTwinScene({ salute = true, gender = "male", contr
       shadows
       dpr={[1, 1.75]}
       gl={{ antialias: true, powerPreference: "high-performance", alpha: true }}
-      camera={{ position: [0.6, 1.4, 4.2], fov: 34, near: 0.1, far: 100 }}
+      camera={{ position: [0.3, 1.25, 3.62], fov: 34, near: 0.1, far: 100 }}
     >
       <FrameloopManager />
       <DigitalTwinLighting />
 
-      <group position={[0, 0, 0]}>
+      <group position={[0, 0, 0]} name="cadet-root">
         <CadetAvatar gender={gender} salute={salute} onFallback={onFallback} />
       </group>
 

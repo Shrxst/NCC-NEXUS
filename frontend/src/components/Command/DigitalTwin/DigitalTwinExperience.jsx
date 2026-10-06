@@ -8,7 +8,15 @@
 
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { RotateCcw, RefreshCw, AlertTriangle, Sparkles, CloudOff } from "lucide-react";
+import {
+  RotateCcw,
+  RefreshCw,
+  AlertTriangle,
+  Sparkles,
+  CloudOff,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 import { useTwinData } from "./useTwinData";
 import DigitalTwinIdentity from "./overlay/DigitalTwinIdentity";
 import DigitalTwinReadiness from "./overlay/DigitalTwinReadiness";
@@ -48,16 +56,22 @@ class SceneBoundary extends React.Component {
 }
 
 // WebGL capability probe — a blank canvas is most often a WebGL/GPU problem.
+// Probe ONCE per page load and release the probe context immediately.
+// (The old version ran on every render and leaked a WebGL context each time —
+// after ~16 renders the browser refuses new contexts and 3D "disappears".)
+let webglOk = null;
 function webglSupported() {
+  if (webglOk !== null) return webglOk;
   try {
     const c = document.createElement("canvas");
-    return !!(
-      window.WebGLRenderingContext &&
-      (c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl"))
-    );
+    const gl =
+      c.getContext("webgl2") || c.getContext("webgl") || c.getContext("experimental-webgl");
+    webglOk = !!(window.WebGLRenderingContext && gl);
+    gl?.getExtension?.("WEBGL_lose_context")?.loseContext?.();
   } catch {
-    return false;
+    webglOk = false;
   }
+  return webglOk;
 }
 
 function InitSequence() {
@@ -74,7 +88,7 @@ function InitSequence() {
   );
 }
 
-export default function DigitalTwinExperience({ embedded = false, gender = "male" }) {
+export default function DigitalTwinExperience({ embedded = false, gender }) {
   const params = useParams();
   const {
     reg,
@@ -89,22 +103,20 @@ export default function DigitalTwinExperience({ embedded = false, gender = "male
     recompute,
   } = useTwinData(params.regimentalNo);
 
+  // Gender from the NCC regimental number itself: SW = Senior Wing (female),
+  // SD = Senior Division (male). Explicit prop still wins if ever provided.
+  const resolvedGender =
+    gender || (/^[A-Z]{2}\d{4}SW/i.test(reg || "") ? "female" : "male");
+
   const controlsRef = useRef(null);
   const [selected, setSelected] = useState(null);
   const [glbPending, setGlbPending] = useState(false);
 
-  // Salute plays once per cadet per browser session (prevents remount replay).
-  const [salute] = useState(() => {
-    if (!reg) return true;
-    const key = `dt_saluted_${reg}`;
-    try {
-      if (sessionStorage.getItem(key)) return false;
-      sessionStorage.setItem(key, "1");
-      return true;
-    } catch {
-      return true;
-    }
-  });
+  // Salute on every visit, replayable on demand. The tick is passed down as
+  // the `salute` prop: any truthy value plays it, and incrementing it re-runs
+  // the animation effect — so the Salute button below replays it.
+  const [saluteTick, setSaluteTick] = useState(1);
+  const replaySalute = () => setSaluteTick((t) => t + 1);
 
   // Premium init: hold the sequence until data resolves AND a short minimum.
   const [minElapsed, setMinElapsed] = useState(false);
@@ -115,6 +127,16 @@ export default function DigitalTwinExperience({ embedded = false, gender = "male
   const booting = loading || !minElapsed;
 
   const resetView = () => controlsRef.current?.reset?.();
+
+  // Zoom via buttons (the scroll wheel rotates the model instead).
+  const zoomBy = (f) => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const v = c.object.position.clone().sub(c.target);
+    v.setLength(Math.min(5.5, Math.max(2.1, v.length() * f)));
+    c.object.position.copy(c.target).add(v);
+    c.update();
+  };
 
   const pillars = useMemo(() => view?.pillars || [], [view]);
 
@@ -148,15 +170,15 @@ export default function DigitalTwinExperience({ embedded = false, gender = "male
 
       {/* THE EXPERIENCE */}
       {!booting && view && !error && (
-        <div className="dt-stage" onDoubleClick={resetView}>
+        <div className="dt-stage">
           {/* 3D scene (rotatable) */}
           <div className="dt-canvas">
             {webglSupported() ? (
               <SceneBoundary>
                 <Suspense fallback={<div className="dt-canvas-loading" />}>
                   <DigitalTwinScene
-                    salute={salute}
-                    gender={gender}
+                    salute={saluteTick}
+                    gender={resolvedGender}
                     controlsRef={controlsRef}
                     onFallback={() => setGlbPending(true)}
                   />
@@ -194,6 +216,19 @@ export default function DigitalTwinExperience({ embedded = false, gender = "male
                   <CloudOff size={13} /> Reference avatar · NCC model pending
                 </span>
               )}
+              <button className="dt-tool-btn" onClick={() => zoomBy(0.8)} title="Zoom in">
+                <ZoomIn size={14} />
+              </button>
+              <button className="dt-tool-btn" onClick={() => zoomBy(1.25)} title="Zoom out">
+                <ZoomOut size={14} />
+              </button>
+              <button
+                className="dt-tool-btn"
+                onClick={replaySalute}
+                title="Play greeting gesture (presentation only)"
+              >
+                <Sparkles size={14} /> Salute
+              </button>
               <button className="dt-tool-btn" onClick={resetView} title="Reset view">
                 <RotateCcw size={14} /> Reset View
               </button>
@@ -203,7 +238,11 @@ export default function DigitalTwinExperience({ embedded = false, gender = "male
               </button>
             </div>
 
-            <div className="dt-hint">Drag to rotate · scroll to zoom · double-click to reset</div>
+            <div className="dt-note-chip">
+              <Sparkles size={12} />
+              For visual presentation only — gestures are indicative, not official NCC drill
+            </div>
+            <div className="dt-hint">Scroll to rotate · + / − to zoom · double-click to inspect · Reset View to return</div>
           </div>
 
           {/* click-through pillar detail */}

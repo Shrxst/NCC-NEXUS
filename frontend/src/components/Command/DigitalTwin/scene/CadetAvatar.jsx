@@ -14,11 +14,13 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useGLTF, useAnimations } from "@react-three/drei";
 import { LoopOnce } from "three";
-import ProceduralCadet from "./ProceduralCadet";
 
+// Bump MODEL_VERSION whenever the GLB files change — the query string makes
+// every browser (and CDN) fetch the new file instead of a stale cached copy.
+const MODEL_VERSION = 18;
 const MODEL_BY_GENDER = {
-  male: "/models/cadets/male-cadet.glb",
-  female: "/models/cadets/female-cadet.glb",
+  male: `/models/cadets/male-cadet.glb?v=${MODEL_VERSION}`,
+  female: `/models/cadets/female-cadet.glb?v=${MODEL_VERSION}`,
 };
 
 export function resolveCadetModelUrl(gender) {
@@ -30,50 +32,67 @@ function GLBCadet({ url, salute }) {
   const group = useRef();
   const { scene, animations } = useGLTF(url);
   const { actions, names, mixer } = useAnimations(animations, group);
-  const played = useRef(false);
 
-  // Map the required clip names, with graceful aliases + fallbacks.
+  // Map clips. Blender/Mixamo exports often include a static bind-pose clip
+  // named "mixamo.com*" / "T-Pose" — playing it freezes the cadet in T-pose,
+  // so those are never candidates.
   const clips = useMemo(() => {
-    const find = (re) => names.find((n) => re.test(n));
+    const usable = names.filter((n) => !/^mixamo\.com|t-?pose/i.test(n));
+    const find = (re) => usable.find((n) => re.test(n));
     return {
-      idle: find(/idle|breath/i) || find(/attention|savdhan/i) || names[0],
-      attention: find(/attention|savdhan/i) || find(/idle|breath/i) || names[0],
+      idle: find(/idle|breath/i) || find(/attention|savdhan|stand/i) || null,
       salute: find(/salute/i) || null,
+      any: usable[0] || null,
     };
   }, [names]);
 
   useEffect(() => {
     if (!actions) return undefined;
     const idle = clips.idle && actions[clips.idle];
-    const attention = clips.attention && actions[clips.attention];
     const sal = clips.salute && actions[clips.salute];
+    const any = clips.any && actions[clips.any];
 
     let onFinished;
-    if (salute && sal && !played.current) {
-      // Attention → Salute (once) → Idle
-      played.current = true;
-      if (attention) attention.reset().fadeIn(0.25).play();
+    if (salute && sal) {
+      // Salute once at FULL weight immediately — fading in would blend from
+      // the bind pose (the T-pose), which looks like a glitch. The clip
+      // starts and ends at attention, so replays are seamless too.
+      sal.stop();
       sal.reset();
       sal.setLoop(LoopOnce, 1);
       sal.clampWhenFinished = true;
-      sal.fadeIn(0.25).play();
-      onFinished = (e) => {
-        if (e.action !== sal) return;
-        sal.fadeOut(0.35);
-        const next = idle || attention;
-        if (next) next.reset().fadeIn(0.35).play();
-      };
-      if (mixer) mixer.addEventListener("finished", onFinished);
+      sal.setEffectiveWeight(1);
+      sal.play();
+      if (idle && mixer) {
+        onFinished = (e) => {
+          if (e.action !== sal) return;
+          sal.crossFadeTo(idle.reset().play(), 0.35, false);
+        };
+        mixer.addEventListener("finished", onFinished);
+      }
     } else if (idle) {
-      idle.reset().fadeIn(0.3).play();
-    } else if (attention) {
-      attention.reset().fadeIn(0.3).play();
+      idle.stop().reset();
+      idle.setEffectiveWeight(1);
+      idle.play();
+    } else if (sal) {
+      // No salute wanted and no idle clip: freeze on the salute clip's first
+      // frame, which is the attention stance — never the bind pose.
+      sal.stop().reset();
+      sal.setEffectiveWeight(1);
+      sal.play();
+      sal.paused = true;
+    } else if (any) {
+      any.stop().reset();
+      any.setEffectiveWeight(1);
+      any.play();
     }
     // If the GLB has no clips at all, it simply stands in its bind pose — no crash.
 
+    // Cleanup only detaches the listener. Never fade actions out here: on a
+    // salute replay this cleanup runs first, and fading to zero weight shows
+    // the bind pose (T-pose) for a moment — the "jump" glitch.
     return () => {
       if (mixer && onFinished) mixer.removeEventListener("finished", onFinished);
-      [idle, attention, sal].forEach((a) => a && a.fadeOut(0.2));
     };
   }, [actions, mixer, clips, salute]);
 
@@ -94,7 +113,7 @@ class CadetBoundary extends React.Component {
   }
   render() {
     if (this.state.failed) {
-      return <ProceduralCadet gender={this.props.gender} salute={this.props.salute} />;
+      return null; // GLB failed — render nothing rather than a placeholder figure
     }
     return this.props.children;
   }
@@ -133,13 +152,13 @@ export default function CadetAvatar({ gender = "male", salute = true, onFallback
   if (available === true) {
     return (
       <CadetBoundary gender={gender} salute={salute} onFallback={onFallback}>
-        <Suspense fallback={<ProceduralCadet gender={gender} salute={salute} />}>
+        <Suspense fallback={null}>
           <GLBCadet url={url} salute={salute} />
         </Suspense>
       </CadetBoundary>
     );
   }
 
-  // Checking or unavailable → procedural fallback (production GLB pending).
-  return <ProceduralCadet gender={gender} salute={salute} />;
+  // Checking or unavailable → empty scene (no placeholder figure).
+  return null;
 }
